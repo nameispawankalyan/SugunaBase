@@ -35,7 +35,7 @@ const createProject = async () => {
             const newProject = await pool.query(
                 `INSERT INTO projects (name, platform, user_id, package_name, google_sign_in_enabled, google_client_id) 
                  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-                [projectName, 'Android', userId, packageName, true, 'YOUR_GOOGLE_CLIENT_ID']
+                [projectName, 'Android', userId, packageName, true, '30485443594-e02tfbqn89lnvuv92tmcgdbiniem1dar.apps.googleusercontent.com']
             );
             projectId = newProject.rows[0].id;
             console.log('✅ Created Project: ' + projectName + ' (ID: ' + projectId + ')');
