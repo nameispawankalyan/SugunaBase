@@ -1,0 +1,52 @@
+export const API_BASE_URL = '/api/proxy'; // Use Next.js Proxy to avoid CORS
+
+export const api = {
+    getHeaders: () => {
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (typeof window !== 'undefined') {
+            const token = localStorage.getItem('token');
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+        }
+        return headers;
+    },
+
+    get: async (endpoint: string) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}${endpoint}`, { headers: api.getHeaders() });
+            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+            return await res.json();
+        } catch (error) {
+            console.error("API GET Error:", error);
+            throw error;
+        }
+    },
+
+    post: async (endpoint: string, data: any) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: 'POST',
+                headers: api.getHeaders(),
+                body: JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+            return await res.json();
+        } catch (error) {
+            console.error("API POST Error:", error);
+            throw error;
+        }
+    },
+
+    delete: async (endpoint: string) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: 'DELETE',
+                headers: api.getHeaders(),
+            });
+            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+            return await res.json();
+        } catch (error) {
+            console.error("API DELETE Error:", error);
+            throw error;
+        }
+    }
+};

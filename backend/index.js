@@ -1,0 +1,276 @@
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
+const http = require('http');
+const { Server } = require("socket.io");
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+const app = express();
+const server = http.createServer(app);
+const port = process.env.PORT || 80;
+const JWT_SECRET = process.env.JWT_SECRET || 'suguna_secret_key';
+
+// 1. Setup Socket.io
+const io = new Server(server, {
+    cors: { origin: "*", methods: ["GET", "POST"] }
+});
+
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+});
+
+app.use(express.json());
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
+});
+
+// Auth Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(401).json({ error: "Access Denied" });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: "Invalid Token" });
+        req.user = user;
+        next();
+    });
+};
+
+const initDB = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100),
+                email VARCHAR(100) UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                platform VARCHAR(50), 
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                package_name VARCHAR(255),
+                google_sign_in_enabled BOOLEAN DEFAULT FALSE,
+                google_client_id VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // Add columns if they don't exist (Migration for existing DBs)
+        try {
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_sign_in_enabled BOOLEAN DEFAULT FALSE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_client_id VARCHAR(255);`);
+        } catch (e) { console.log("Migration Note:", e.message); }
+        // New Table for End Users (App Users)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS app_users (
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                email VARCHAR(255),
+                name VARCHAR(255),
+                profile_pic TEXT,
+                provider VARCHAR(50) DEFAULT 'email', 
+                google_id VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, email) -- Email unique per project
+            );
+        `);
+        console.log("✅ Database Tables Initialized");
+    } catch (err) {
+        console.error("❌ DB Init Error:", err);
+    }
+};
+initDB();
+
+// --- AUTH ROUTES FOR CONSOLE (Developers) ---
+app.post('/v1/auth/signup', async (req, res) => {
+    const { email, password, name } = req.body;
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const result = await pool.query(
+            'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name',
+            [email, hashedPassword, name]
+        );
+        const token = jwt.sign({ id: result.rows[0].id }, JWT_SECRET, { expiresIn: '1d' });
+        res.status(201).json({ user: result.rows[0], token });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/v1/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+
+        const user = result.rows[0];
+        const match = await bcrypt.compare(password, user.password_hash);
+        if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+
+        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
+        res.json({ user: { id: user.id, email: user.email, name: user.name }, token });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// --- AUTH ROUTES FOR APPS (End Users) ---
+
+// App User Login / Signup (Google / Email)
+app.post('/v1/auth/app-login', async (req, res) => {
+    const { project_id, email, name, photo_url, google_id, provider } = req.body;
+
+    // In real world: Verify 'project_id' exists and 'google_id_token' is valid.
+
+    try {
+        // Check if user exists in this project
+        const check = await pool.query(
+            'SELECT * FROM app_users WHERE project_id = $1 AND email = $2',
+            [project_id, email]
+        );
+
+        // Check if Google Sign-In is enabled for this project
+        if (provider === 'google') {
+            const projectResult = await pool.query('SELECT google_sign_in_enabled FROM projects WHERE id = $1', [project_id]);
+            if (projectResult.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+            if (!projectResult.rows[0].google_sign_in_enabled) {
+                return res.status(403).json({ error: "Google Sign-In is disabled for this project" });
+            }
+        }
+
+        let user;
+        if (check.rows.length > 0) {
+            // Login: Update last_login
+            user = check.rows[0];
+            await pool.query('UPDATE app_users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+        } else {
+            // Signup: Create new user
+            const insert = await pool.query(
+                `INSERT INTO app_users (project_id, email, name, profile_pic, provider, google_id) 
+                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+                [project_id, email, name, photo_url, provider || 'email', google_id]
+            );
+            user = insert.rows[0];
+        }
+
+        // Generate App User Token (Different from Developer Token)
+        const token = jwt.sign({ app_user_id: user.id, project_id: project_id }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.json({ user, token });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+
+app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
+
+// --- PROTECTED ROUTES (Require Login) ---
+
+// Get User's Projects
+app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
+    try {
+        const result = await pool.query(
+            'SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC',
+            [req.user.id] // user.id from Token
+        );
+        res.json({ projects: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Create Project
+app.post('/v1/projects', authenticateToken, async (req, res) => {
+    const { name, platform, google_client_id } = req.body; // Accept google_client_id
+    try {
+        const result = await pool.query(
+            'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [name, platform, req.user.id, !!google_client_id, google_client_id] // Enable if ID provided
+        );
+        io.to(req.user.id.toString()).emit("project_created", result.rows[0]);
+        res.status(201).json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/v1/projects/:id', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM projects WHERE id = $1 AND user_id = $2',
+            [req.params.id, req.user.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET USERS FOR A PROJECT (Console View)
+app.get('/v1/projects/:id/users', authenticateToken, async (req, res) => {
+    try {
+        // 1. Verify Project Ownership
+        const projectCheck = await pool.query(
+            'SELECT * FROM projects WHERE id = $1 AND user_id = $2',
+            [req.params.id, req.user.id]
+        );
+        if (projectCheck.rows.length === 0) return res.status(403).json({ error: "Unauthorized Access to Project" });
+
+        // 2. Fetch Users
+        const users = await pool.query(
+            'SELECT * FROM app_users WHERE project_id = $1 ORDER BY created_at DESC',
+            [req.params.id]
+        );
+        res.json({ users: users.rows });
+
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Update Project (Add App)
+app.post('/v1/projects/:id/apps', authenticateToken, async (req, res) => {
+    const { package_name } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE projects SET package_name = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+            [package_name, req.params.id, req.user.id]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
+        io.to(req.user.id.toString()).emit("project_updated", result.rows[0]);
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'DELETE FROM projects WHERE id = $1 AND user_id = $2',
+            [req.params.id, req.user.id]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
+
+        io.to(req.user.id.toString()).emit("project_deleted", req.params.id);
+        res.json({ message: 'Deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Socket Connection (Join Room by User ID)
+io.on('connection', (socket) => {
+    // Client sends token to authenticate socket? For now, we simple-broadcast or we can improve later.
+    // Ideally client joins room: socket.join(userId)
+    // For now, let's keep it simple or implement a 'join' event from client
+    socket.on('join', (userId) => {
+        socket.join(userId);
+    });
+});
+
+server.listen(port, () => console.log(`🚀 SugunaBase Server running on port ${port}`));
