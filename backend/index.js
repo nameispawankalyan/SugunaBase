@@ -225,6 +225,19 @@ app.post('/v1/auth/app-login', async (req, res) => {
 
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
 
+// Check Project Status for App (Public Route)
+app.get('/v1/app/check-project/:id', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT google_sign_in_enabled FROM projects WHERE id = $1', [req.params.id]);
+        if (result.rows.length === 0) {
+            return res.json({ exists: false, active: false });
+        }
+        res.json({ exists: true, active: result.rows[0].google_sign_in_enabled });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // --- PROTECTED ROUTES (Require Login) ---
 
 // Get User's Projects
