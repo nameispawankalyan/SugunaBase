@@ -249,40 +249,52 @@ const authenticateAppToken = (req, res, next) => {
     });
 };
 
-// GET Document (Supports Nested Paths)
-app.get('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateAppToken, async (req, res) => {
-    const { collection, document } = req.params;
+// Unified Firestore Handler (Supports Deeply Nested Paths)
+app.get('/v1/firestore/*', authenticateAppToken, async (req, res) => {
+    const fullPath = req.params[0];
+    const segments = fullPath.split('/').filter(s => s.length > 0);
     const { project_id } = req.app_user;
 
-    try {
-        const result = await pool.query(
-            'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-            [project_id, collection, document]
-        );
-        if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
-        res.json(result.rows[0].data);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    if (segments.length === 0) return res.status(400).json({ error: "Invalid path" });
+
+    // If segments are EVEN, it's a Document request (col/doc/col/doc)
+    // If segments are ODD, it's a Collection request (col/doc/col)
+
+    if (segments.length % 2 === 0) {
+        // Document Request
+        const document_id = segments.pop();
+        const collection_name = segments.join('/');
+        try {
+            const result = await pool.query(
+                'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
+                [project_id, collection_name, document_id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
+            res.json(result.rows[0].data);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    } else {
+        // Collection Request
+        const collection_name = segments.join('/');
+        try {
+            const result = await pool.query(
+                'SELECT document_id, data FROM firestore_data WHERE project_id = $1 AND collection_name = $2',
+                [project_id, collection_name]
+            );
+            res.json(result.rows);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    }
 });
 
-// GET All Documents in Collection (Supports Nested Paths)
-app.get('/v1/firestore/:collection((?:[^/]+/)*[^/]+)', authenticateAppToken, async (req, res) => {
-    const { collection } = req.params;
-    const { project_id } = req.app_user;
-
-    try {
-        const result = await pool.query(
-            'SELECT document_id, data FROM firestore_data WHERE project_id = $1 AND collection_name = $2',
-            [project_id, collection]
-        );
-        res.json(result.rows);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// SET Document (Supports Nested Paths)
-app.post('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateAppToken, async (req, res) => {
-    const { collection, document } = req.params;
+app.post('/v1/firestore/*', authenticateAppToken, async (req, res) => {
+    const fullPath = req.params[0];
+    const segments = fullPath.split('/').filter(s => s.length > 0);
     const { project_id } = req.app_user;
     const data = req.body;
+
+    if (segments.length % 2 !== 0) return res.status(400).json({ error: "POST requires a full document path (even segments)" });
+
+    const document_id = segments.pop();
+    const collection_name = segments.join('/');
 
     try {
         await pool.query(
@@ -290,23 +302,27 @@ app.post('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateAp
              VALUES ($1, $2, $3, $4) 
              ON CONFLICT (project_id, collection_name, document_id) 
              DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
-            [project_id, collection, document, JSON.stringify(data)]
+            [project_id, collection_name, document_id, JSON.stringify(data)]
         );
-        res.json({ message: "Document Saved", collection, document });
+        res.json({ message: "Document Saved", collection_name, document_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// UPDATE Document (Supports Nested Paths)
-app.patch('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateAppToken, async (req, res) => {
-    const { collection, document } = req.params;
+app.patch('/v1/firestore/*', authenticateAppToken, async (req, res) => {
+    const fullPath = req.params[0];
+    const segments = fullPath.split('/').filter(s => s.length > 0);
     const { project_id } = req.app_user;
     const newData = req.body;
 
+    if (segments.length % 2 !== 0) return res.status(400).json({ error: "PATCH requires a full document path (even segments)" });
+
+    const document_id = segments.pop();
+    const collection_name = segments.join('/');
+
     try {
-        // Fetch current data
         const current = await pool.query(
             'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-            [project_id, collection, document]
+            [project_id, collection_name, document_id]
         );
 
         let finalData = newData;
@@ -319,13 +335,14 @@ app.patch('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateA
              VALUES ($1, $2, $3, $4) 
              ON CONFLICT (project_id, collection_name, document_id) 
              DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
-            [project_id, collection, document, JSON.stringify(finalData)]
+            [project_id, collection_name, document_id, JSON.stringify(finalData)]
         );
-        res.json({ message: "Document Merged", collection, document });
+        res.json({ message: "Document Merged", collection_name, document_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- CONSOLE FIRESTORE MANAGEMENT ---
+
 
 app.get('/v1/console/projects/:projectId/firestore/collections', authenticateToken, async (req, res) => {
     const { projectId } = req.params;
