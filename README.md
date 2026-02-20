@@ -83,11 +83,18 @@ api.getCollectionDocuments(token, "users_profile", filters).enqueue(object : Cal
 })
 ```
 
-#### **Step 5: Delete Document (DELETE)**
-Remove a document permanently.
+#### **Step 5: Delete (Document or Collection)**
+SugunaBase allows you to delete a single document OR an entire collection with a single call.
+
+- **To delete a Document**: Pass the full path (e.g., `users/123`).
+- **To delete a Collection**: Pass only the collection path (e.g., `users`).
+
 ```kotlin
-// Path: users_profile/unique_id
+// Example 1: Delete a specific document
 api.deleteDocument(token, "users_profile/user_123").enqueue(...)
+
+// Example 2: Delete an ENTIRE collection (Be careful!)
+api.deleteDocument(token, "users_profile").enqueue(...)
 ```
 
 ### **C. Deeply Nested Paths**
