@@ -83,6 +83,13 @@ api.getCollectionDocuments(token, "users_profile", filters).enqueue(object : Cal
 })
 ```
 
+#### **Step 5: Delete Document (DELETE)**
+Remove a document permanently.
+```kotlin
+// Path: users_profile/unique_id
+api.deleteDocument(token, "users_profile/user_123").enqueue(...)
+```
+
 ### **C. Deeply Nested Paths**
 You can organize data as deep as you want:
 - Path: `Wallet/Coins/Today` (Total 3 levels)

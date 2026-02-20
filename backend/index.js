@@ -368,6 +368,33 @@ app.patch('/v1/firestore/*', authenticateAppToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete('/v1/firestore/*', authenticateAppToken, async (req, res) => {
+    const fullPath = req.params[0];
+    const segments = fullPath.split('/').filter(s => s.length > 0);
+    const { project_id } = req.app_user;
+
+    if (segments.length % 2 !== 0) return res.status(400).json({ error: "DELETE requires a full document path" });
+
+    const document_id = segments.pop();
+    const collection_name = segments.join('/');
+
+    try {
+        await pool.query(
+            'DELETE FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
+            [project_id, collection_name, document_id]
+        );
+
+        // Notify Subscribers
+        io.to(`project_${project_id}_${collection_name}`).emit('firestore_update', {
+            type: 'delete',
+            collection: collection_name,
+            document_id: document_id
+        });
+
+        res.json({ message: "Document Deleted", collection_name, document_id });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- CONSOLE FIRESTORE MANAGEMENT ---
 
 app.get('/v1/console/projects/:projectId/firestore/collections', authenticateToken, async (req, res) => {
