@@ -350,7 +350,7 @@ app.get('/v1/projects/:id/config', authenticateToken, async (req, res) => {
                 },
                 "services": {
                     "sugunabase": {
-                        "base_url": "http://165.232.183.6/" // In production, this should be dynamic
+                        "base_url": "http://api.suguna.co/" // Use designated API hostname
                     }
                 },
                 "app_integrity": {
