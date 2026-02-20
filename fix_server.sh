@@ -2,6 +2,11 @@
 
 echo "🔧 Starting Server Fix..."
 
+# 0. Force Update from GitHub
+echo "⏬ Pulling latest code from GitHub..."
+git fetch origin main
+git reset --hard origin/main
+
 # 1. Stop all existing processes to clear ports
 echo "🛑 Stopping existing processes..."
 pm2 delete all || true
