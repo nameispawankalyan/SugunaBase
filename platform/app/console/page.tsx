@@ -62,9 +62,14 @@ export default function Dashboard() {
             if (userStr) {
                 try {
                     const user = JSON.parse(userStr);
-                    socket.emit('join', user.id);
+                    if (user && user.id) {
+                        socket.emit('join', user.id);
+                    }
                 } catch (e) {
-                    console.error("Failed to parse user", e);
+                    console.error("Failed to parse user data, clearing storage", e);
+                    localStorage.removeItem('user');
+                    localStorage.removeItem('token');
+                    router.push('/login');
                 }
             }
         });
