@@ -1,4 +1,4 @@
-export const API_BASE_URL = '/api/proxy'; // Use Next.js Proxy to avoid CORS
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://165.232.183.6'; // Backend API URL
 
 export const api = {
     getHeaders: () => {
