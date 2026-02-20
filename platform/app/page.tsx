@@ -1,300 +1,166 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { api } from '@/utils/api';
-import { Plus, Trash2, Box, Settings, Smartphone, Globe, Monitor } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { ArrowRight, Database, Shield, Zap, Code, Terminal, Globe } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
-// Helper to get Icon
-const getPlatformIcon = (platform: string) => {
-  switch (platform.toLowerCase()) {
-    case 'android': return <Smartphone className="h-5 w-5" />;
-    case 'web': return <Globe className="h-5 w-5" />;
-    case 'ios': return <Smartphone className="h-5 w-5" />; // Use same icon for now
-    default: return <Monitor className="h-5 w-5" />;
-  }
-};
-
-// ... imports
-import { io } from 'socket.io-client';
-
-// ... (getPlatformIcon helper remains same)
-
-export default function Dashboard() {
+export default function LandingPage() {
   const router = useRouter();
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [packageName, setPackageName] = useState('');
-  const [googleClientId, setGoogleClientId] = useState(''); // New State for Google Auth
-  const [platform, setPlatform] = useState('Android');
-
-  // Fetch Projects
-  const fetchProjects = async () => {
-    try {
-      const data = await api.get('/projects');
-      setProjects(data.projects || []);
-    } catch (error) {
-      console.error("Failed to fetch projects", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    fetchProjects();
-
-    // Socket.io Connection
-    const socket = io('http://165.232.183.6', { path: '/socket.io' }); // Port 80
-
-    socket.on('connect', () => {
-      console.log("⚡ Socket Connected");
-      // Join User-Specific Room
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          socket.emit('join', user.id);
-        } catch (e) {
-          console.error("Failed to parse user", e);
-        }
-      }
-    });
-
-    socket.on('project_created', (newProject) => {
-      setProjects(prev => [newProject, ...prev]);
-    });
-
-    socket.on('project_updated', (updatedProject) => {
-      setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-    });
-
-    socket.on('project_deleted', (deletedId) => {
-      setProjects(prev => prev.filter(p => p.id != deletedId));
-    });
-
-    return () => { socket.disconnect(); };
+    const token = localStorage.getItem('token');
+    if (token) {
+      setIsLoggedIn(true);
+      router.push('/console');
+    }
   }, [router]);
 
-  const createProject = async () => {
-    if (!newProjectName) return;
-
-    try {
-      // 1. Create Project
-      const project = await api.post('/projects', {
-        name: newProjectName,
-        platform: platform,
-        google_client_id: googleClientId // Send Google Client ID
-      });
-
-      // 2. Link Package Name (if provided)
-      if (packageName && project.id) {
-        await api.post(`/projects/${project.id}/apps`, { package_name: packageName });
-      }
-
-      setNewProjectName('');
-      setPackageName('');
-      setGoogleClientId('');
-      setIsModalOpen(false);
-      // fetchProjects(); // handled by socket now!
-    } catch (error) {
-      alert('Failed to create project');
-    }
-  };
-
-  const deleteProject = async (id: string) => {
-    if (confirm('Are you sure you want to delete this project?')) {
-      try {
-        await api.delete(`/projects/${id}`);
-      } catch (error) {
-        alert('Failed to delete project');
-      }
-    }
-  };
-
-  const logout = async () => {
-    router.push('/login');
-  };
-
-  if (loading) {
-    return <div className="p-8 text-center flex items-center justify-center h-screen">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
-    </div>;
-  }
-
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      {/* ... (Header & Stats remain same) ... */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
-          <p className="text-gray-500 mt-1">Welcome, Admin!</p>
-        </div>
-        <div className="flex gap-4">
-          <button onClick={logout} className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
-            Log Out
-          </button>
-          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-orange-600 text-white px-5 py-2.5 rounded-lg hover:bg-orange-700 transition-colors shadow-lg shadow-orange-200 font-medium">
-            <Plus className="h-5 w-5" />
-            Create Project
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        {/* ... Stats Cards (Same as before) ... */}
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Total Projects</p>
-              <h3 className="text-3xl font-bold text-gray-900 mt-2">{projects.length}</h3>
-              <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded-full mt-2 inline-block">Active Apps</span>
-            </div>
-            <div className="p-2 bg-blue-50 rounded-lg"><Box className="h-6 w-6 text-blue-600" /></div>
+    <div className="min-h-screen bg-slate-900 text-white">
+      {/* Navbar */}
+      <nav className="border-b border-slate-800 backdrop-blur-md sticky top-0 z-50 bg-slate-900/80">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 bg-orange-600 rounded-lg flex items-center justify-center font-bold text-white">S</div>
+            <span className="text-xl font-bold tracking-tight">SugunaBase</span>
           </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Server Status</p>
-              <h3 className="text-2xl font-bold text-green-600 mt-2">Online</h3>
-              <span className="text-xs text-gray-400 font-medium mt-2 inline-block">165.232.183.6</span>
-            </div>
-            <div className="p-2 bg-green-50 rounded-lg"><Settings className="h-6 w-6 text-green-600" /></div>
+
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
+            <a href="#features" className="hover:text-white transition-colors">Products</a>
+            <a href="#docs" className="hover:text-white transition-colors">Docs</a>
+            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
           </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Database</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-2">Connected</h3>
-              <span className="text-xs text-green-600 font-medium mt-2 inline-block">PostgreSQL</span>
-            </div>
-            <div className="p-2 bg-purple-50 rounded-lg"><Settings className="h-6 w-6 text-purple-600" /></div>
-          </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map((project: any) => (
-          <div key={project.id} className="group bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 relative overflow-hidden">
-            {/* Delete Button */}
-            <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProject(project.id) }} className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-full transition-colors"><Trash2 className="h-4 w-4" /></button>
-            </div>
-
-            <div className="flex items-center gap-4 mb-4">
-              <div className={`p-3 rounded-xl ${project.platform === 'Android' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                {getPlatformIcon(project.platform)}
-              </div>
-              <div>
-                <h3 className="font-bold text-lg text-900">{project.name}</h3>
-                <p className="text-sm text-gray-500">{project.platform}</p>
-                {project.package_name && <p className="text-xs text-gray-400 mt-1">{project.package_name}</p>}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-50">
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-400 font-medium uppercase">Users</span>
-                <span className="text-sm font-bold text-gray-700">{project.users_count || 0}</span>
-              </div>
-              <div className="flex flex-col text-right">
-                <span className="text-xs text-gray-400 font-medium uppercase">Revenue</span>
-                <span className="text-sm font-bold text-gray-700">₹{project.revenue || 0}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 pt-2">
-              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${project.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                {project.status || 'Active'}
-              </span>
-            </div>
-
-            <Link href={`/project/${project.id}`} className="absolute inset-0 z-10" />
-          </div>
-        ))}
-
-        {/* Create New Card */}
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex flex-col items-center justify-center h-full min-h-[200px] rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-all group"
-        >
-          <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center shadow-sm mb-3 group-hover:scale-110 transition-transform">
-            <Plus className="h-6 w-6 text-gray-400 group-hover:text-orange-600" />
-          </div>
-          <span className="font-medium text-gray-500 group-hover:text-gray-700">Add New App</span>
-        </button>
-      </div>
-
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl transform transition-all">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900">New Project</h2>
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Project Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., FriendZone"
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 py-2.5 px-3"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Package Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., com.suguna.app"
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 py-2.5 px-3"
-                  value={packageName}
-                  onChange={(e) => setPackageName(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Platform</label>
-                <select
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 py-2.5 px-3"
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                >
-                  <option value="Android">Android</option>
-                  <option value="iOS">iOS</option>
-                  <option value="Web">Web</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Google Client ID (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="For Google Sign-In"
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 py-2.5 px-3"
-                  value={googleClientId}
-                  onChange={(e) => setGoogleClientId(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-8">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+          <div className="flex items-center gap-4">
+            {isLoggedIn ? (
+              <Link
+                href="/console"
+                className="text-sm font-medium text-slate-300 hover:text-white px-3 py-2"
               >
-                Cancel
-              </button>
-              <button
-                onClick={createProject}
-                className="flex-1 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium shadow-sm transition-colors"
+                Go to Console
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="text-sm font-medium text-slate-300 hover:text-white px-3 py-2"
               >
-                Create Project
-              </button>
-            </div>
+                Sign In
+              </Link>
+            )}
+
+            <Link
+              href={isLoggedIn ? "/console" : "/signup"}
+              className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2"
+            >
+              {isLoggedIn ? 'Console' : 'Get Started'} <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </div>
-      )}
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-20 px-6 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-7xl pointer-events-none">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-orange-600/20 rounded-full blur-[100px] animate-pulse" />
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-600/20 rounded-full blur-[100px]" />
+        </div>
+
+        <div className="max-w-5xl mx-auto text-center relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700 text-sm text-slate-300 mb-8">
+            <span className="flex h-2 w-2 rounded-full bg-green-500"></span>
+            <span>SugunaBase 2.0 is now live</span>
+          </div>
+
+          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-8 leading-tight">
+            Build apps <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">fast</span>, without managing infrastructure.
+          </h1>
+
+          <p className="text-xl text-slate-400 mb-12 max-w-2xl mx-auto leading-relaxed">
+            SugunaBase gives you the tools to develop high-quality apps, grow your user base, and earn more money. All from a single, easy-to-use platform.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href={isLoggedIn ? "/console" : "/signup"}
+              className="w-full sm:w-auto px-8 py-4 bg-white text-slate-900 rounded-full font-bold hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
+            >
+              Get Started <ArrowRight className="h-5 w-5" />
+            </Link>
+            <Link
+              href="/docs"
+              className="w-full sm:w-auto px-8 py-4 bg-slate-800/50 border border-slate-700 hover:bg-slate-800 text-white rounded-full font-bold transition-all flex items-center justify-center gap-2"
+            >
+              <Terminal className="h-5 w-5" /> View Documentation
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Grid */}
+      <section id="features" className="py-24 bg-slate-900 relative">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold mb-4">Everything you need to build apps</h2>
+            <p className="text-slate-400">Products that work great individually, but even better together.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <FeatureCard
+              icon={<Database className="h-8 w-8 text-orange-400" />}
+              title="Realtime Database"
+              desc="Store and sync data efficiently in realtime across all your clients."
+            />
+            <FeatureCard
+              icon={<Shield className="h-8 w-8 text-blue-400" />}
+              title="Authentication"
+              desc="Secure user sign-ins with email, Google, and more with zero friction."
+            />
+            <FeatureCard
+              icon={<Globe className="h-8 w-8 text-green-400" />}
+              title="Hosting"
+              desc="Deploy fast-loading, secure web apps and static content with ease."
+            />
+            <FeatureCard
+              icon={<Code className="h-8 w-8 text-purple-400" />}
+              title="Cloud Functions"
+              desc="Run backend code without managing servers. Scale automatically."
+            />
+            <FeatureCard
+              icon={<Zap className="h-8 w-8 text-yellow-400" />}
+              title="Analytics"
+              desc="Get insights into user behavior and app performance."
+            />
+            <FeatureCard
+              icon={<Terminal className="h-8 w-8 text-slate-400" />}
+              title="CLI Tools"
+              desc="Manage your projects and deploy from your command line."
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-800 py-12 bg-slate-950">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 bg-slate-800 rounded flex items-center justify-center text-xs font-bold text-white">S</div>
+            <span className="font-bold text-slate-300">SugunaBase</span>
+          </div>
+          <p className="text-slate-500 text-sm">© 2026 SugunaBase Inc. All rights reserved.</p>
+        </div>
+      </footer>
     </div>
   );
+}
+
+function FeatureCard({ icon, title, desc }: { icon: any, title: string, desc: string }) {
+  return (
+    <div className="p-8 rounded-2xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800 transition-colors">
+      <div className="mb-4">{icon}</div>
+      <h3 className="text-xl font-bold mb-3">{title}</h3>
+      <p className="text-slate-400 leading-relaxed">{desc}</p>
+    </div>
+  )
 }

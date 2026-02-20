@@ -29,6 +29,11 @@ const Sidebar = () => {
 
   const [projectName, setProjectName] = useState('Loading...');
 
+  // HIDE SIDEBAR ON PUBLIC PAGES
+  if (pathname === '/' || pathname === '/login' || pathname === '/signup') {
+    return null;
+  }
+
   // Fetch Project Name when inside a project
   useEffect(() => {
     if (projectId) {
@@ -62,8 +67,8 @@ const Sidebar = () => {
         <div className="flex-1 overflow-y-auto px-2 py-4 space-y-2">
           <nav>
             <Link
-              href="/"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-md transition-colors ${pathname === '/' ? 'bg-[#1a3752] text-[#4fc3f7] font-medium' : 'hover:bg-[#1a3449] hover:text-white'}`}
+              href="/console"
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-md transition-colors ${pathname === '/console' ? 'bg-[#1a3752] text-[#4fc3f7] font-medium' : 'hover:bg-[#1a3449] hover:text-white'}`}
             >
               <LayoutDashboard className="h-5 w-5" />
               All Projects
@@ -98,7 +103,7 @@ const Sidebar = () => {
         {/* Back Link */}
         <nav>
           <Link
-            href="/"
+            href="/console"
             className="flex items-center gap-3 px-4 py-2 rounded-md hover:bg-[#1a3449] hover:text-white mb-4 text-[#a2b5c8]"
           >
             <ArrowLeft className="h-5 w-5" />

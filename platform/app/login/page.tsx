@@ -23,7 +23,7 @@ export default function Login() {
             if (res.token) {
                 localStorage.setItem('token', res.token);
                 localStorage.setItem('user', JSON.stringify(res.user));
-                router.push('/');
+                router.push('/console');
             }
         } catch (err: any) {
             setError('Invalid email or password');

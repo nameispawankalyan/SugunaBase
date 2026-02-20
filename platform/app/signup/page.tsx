@@ -24,7 +24,7 @@ export default function Signup() {
             if (res.token) {
                 localStorage.setItem('token', res.token);
                 localStorage.setItem('user', JSON.stringify(res.user));
-                router.push('/');
+                router.push('/console');
             }
         } catch (err: any) {
             setError('Registration failed. Email might be in use.');
