@@ -45,9 +45,7 @@ server {
     server_name ${API_DOMAIN};
 
     location / {
-        proxy_pass http://localhost:80; # Node.js Backend (Port 80 internally, but Nginx takes 80 public)
-        # Wait, if Nginx takes 80, backend can't run on 80.
-        #Backend should run on another port e.g. 5000.
+        proxy_pass http://localhost:5000; # Node.js Backend (Port 5000)
         
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
