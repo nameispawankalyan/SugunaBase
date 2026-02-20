@@ -34,14 +34,15 @@ PORT=3000 pm2 start "npm run start" --name "suguna-console"
 pm2 save
 
 # 5. Reset Nginx Configuration
-echo "⚙️ Configuring Nginx..."
+echo "⚙️ Configuring Nginx (Unified Robust Config)..."
 sudo tee /etc/nginx/sites-available/suguna > /dev/null <<EOT
+# 1. API Subdomain (Highest Priority)
 server {
-    listen 80 default_server;
-    server_name suguna.co www.suguna.co console.suguna.co;
+    listen 80;
+    server_name api.suguna.co;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -50,12 +51,13 @@ server {
     }
 }
 
+# 2. Main Site and Console
 server {
     listen 80;
-    server_name api.suguna.co;
+    server_name suguna.co www.suguna.co console.suguna.co;
 
     location / {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -65,8 +67,9 @@ server {
 }
 EOT
 
-# Ensure semlink exists and default is removed to prevent port 3000 redirect bugs
 sudo rm -f /etc/nginx/sites-enabled/default
+sudo rm -f /etc/nginx/sites-enabled/suguna_main
+sudo rm -f /etc/nginx/sites-enabled/suguna_api
 sudo ln -sf /etc/nginx/sites-available/suguna /etc/nginx/sites-enabled/
 
 # 6. Check Nginx and Restart

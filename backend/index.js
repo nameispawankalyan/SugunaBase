@@ -264,6 +264,20 @@ app.get('/v1/firestore/:collection/:document', authenticateAppToken, async (req,
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET All Documents in Collection (Unique Route to avoid 404 conflicts)
+app.get('/v1/get-all-users/:collection', authenticateAppToken, async (req, res) => {
+    const { collection } = req.params;
+    const { project_id } = req.app_user;
+
+    try {
+        const result = await pool.query(
+            'SELECT document_id, data FROM firestore_data WHERE project_id = $1 AND collection_name = $2',
+            [project_id, collection]
+        );
+        res.json(result.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // SET Document (Overwrite)
 app.post('/v1/firestore/:collection/:document', authenticateAppToken, async (req, res) => {
     const { collection, document } = req.params;
@@ -523,6 +537,15 @@ io.on('connection', (socket) => {
     // For now, let's keep it simple or implement a 'join' event from client
     socket.on('join', (userId) => {
         socket.join(userId);
+    });
+});
+
+// 404 Handler for API
+app.use((req, res) => {
+    res.status(404).json({
+        error: "Route not found in SugunaBase Backend",
+        method: req.method,
+        path: req.url
     });
 });
 
