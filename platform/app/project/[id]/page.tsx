@@ -3,21 +3,32 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { api } from '@/utils/api';
-import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2 } from 'lucide-react';
+import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2, Key, Save } from 'lucide-react';
 import Link from 'next/link';
 
 // Config Object Generator
-const generateConfig = (projectId: string, packageName: string) => {
+const generateConfig = (projectId: string, packageName: string, googleClientId?: string) => {
     return {
         "project_info": {
             "project_name": "SugunaBase Project",
             "project_id": projectId,
             "project_number": "1",
-            "endpoint": "http://165.232.183.6/v1" // Remote Backend Endpoint
+            "endpoint": "https://api.suguna.co/v1" // Secured Endpoint
         },
         "client": {
             "package_name": packageName,
-            "client_id": `android:${packageName}`
+            "client_id": `android:${packageName}`,
+            "oauth_client": [
+                {
+                    "client_id": googleClientId || "YOUR_WEB_CLIENT_ID",
+                    "client_type": 3
+                }
+            ],
+            "services": {
+                "sugunabase": {
+                    "base_url": "https://api.suguna.co/"
+                }
+            }
         }
     }
 };
@@ -33,6 +44,11 @@ export default function ProjectDetails() {
     const [isAddingApp, setIsAddingApp] = useState(false);
     const [configJson, setConfigJson] = useState<string | null>(null);
 
+    // SHA Keys State
+    const [sha1, setSha1] = useState('');
+    const [sha256, setSha256] = useState('');
+    const [savingKeys, setSavingKeys] = useState(false);
+
     useEffect(() => {
         if (!projectId) return;
 
@@ -42,11 +58,12 @@ export default function ProjectDetails() {
                 setProject(doc);
                 if (doc.package_name) {
                     setPackageName(doc.package_name);
-                    setConfigJson(JSON.stringify(generateConfig(projectId, doc.package_name), null, 2));
+                    setSha1(doc.sha1_fingerprint || '');
+                    setSha256(doc.sha256_fingerprint || '');
+                    setConfigJson(JSON.stringify(generateConfig(projectId, doc.package_name, doc.google_client_id), null, 2));
                 }
             } catch (error) {
                 console.error("Failed to fetch project", error);
-                // router.push('/'); 
             } finally {
                 setLoading(false);
             }
@@ -65,11 +82,26 @@ export default function ProjectDetails() {
             // Update local state
             const updatedProject = { ...project, package_name: packageName };
             setProject(updatedProject);
-            setConfigJson(JSON.stringify(generateConfig(projectId, packageName), null, 2));
+            setConfigJson(JSON.stringify(generateConfig(projectId, packageName, project.google_client_id), null, 2));
             setIsAddingApp(false);
             alert('App linked successfully!');
         } catch (error: any) {
             alert('Failed to add app: ' + error.message);
+        }
+    };
+
+    const handleSaveKeys = async () => {
+        setSavingKeys(true);
+        try {
+            const updated = await api.put(`/projects/${projectId}/sha`, { sha1, sha256 });
+            setProject(updated);
+            setSha1(updated.sha1_fingerprint || '');
+            setSha256(updated.sha256_fingerprint || '');
+            alert('Signing keys saved successfully!');
+        } catch (error: any) {
+            alert('Failed to save keys: ' + error.message);
+        } finally {
+            setSavingKeys(false);
         }
     };
 
@@ -97,7 +129,7 @@ export default function ProjectDetails() {
         <div className="space-y-6 max-w-6xl mx-auto">
             {/* Header */}
             <div className="flex items-center gap-4 py-4">
-                <Link href="/" className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+                <Link href="/console" className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
                     <ArrowLeft className="h-5 w-5" />
                 </Link>
                 <div className="flex-1">
@@ -156,8 +188,48 @@ export default function ProjectDetails() {
                                         </div>
                                     </div>
 
-                                    {/* Configuration Download */}
+                                    {/* SHA Keys Configuration */}
                                     <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
+                                        <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                                            <Key className="h-4 w-4 text-gray-500" />
+                                            App Signing Keys (SHA)
+                                        </h4>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">SHA-1 Certificate Fingerprint</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full text-sm font-mono border-gray-300 rounded-md focus:border-orange-500 focus:ring-orange-500"
+                                                    placeholder="XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX"
+                                                    value={sha1}
+                                                    onChange={(e) => setSha1(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">SHA-256 Certificate Fingerprint</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full text-sm font-mono border-gray-300 rounded-md focus:border-orange-500 focus:ring-orange-500"
+                                                    placeholder="XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX"
+                                                    value={sha256}
+                                                    onChange={(e) => setSha256(e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="pt-2">
+                                                <button
+                                                    onClick={handleSaveKeys}
+                                                    disabled={savingKeys}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition shadow-sm"
+                                                >
+                                                    <Save className="h-4 w-4" />
+                                                    {savingKeys ? 'Saving...' : 'Save Keys'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Configuration Download */}
+                                    <div className="bg-blue-50/50 rounded-lg p-5 border border-blue-100">
                                         <h4 className="font-medium text-gray-900 mb-2">Setup Instructions</h4>
                                         <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2 mb-4">
                                             <li>Download the <strong>suguna-services.json</strong> file below.</li>

@@ -1,11 +1,11 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://165.232.183.6'; // Backend API URL
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.suguna.co'; // Backend API URL
 
 export const api = {
     getHeaders: () => {
         const headers: any = { 'Content-Type': 'application/json' };
         if (typeof window !== 'undefined') {
             const token = localStorage.getItem('token');
-            if (token) headers['Authorization'] = `Bearer ${token}`;
+            if (token) headers['Authorization'] = `Bearer ${token}`; // Authorization: Bearer <token>
         }
         return headers;
     },
@@ -32,6 +32,21 @@ export const api = {
             return await res.json();
         } catch (error) {
             console.error("API POST Error:", error);
+            throw error;
+        }
+    },
+
+    put: async (endpoint: string, data: any) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: 'PUT',
+                headers: api.getHeaders(),
+                body: JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+            return await res.json();
+        } catch (error) {
+            console.error("API PUT Error:", error);
             throw error;
         }
     },
