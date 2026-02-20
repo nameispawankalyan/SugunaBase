@@ -343,7 +343,6 @@ app.patch('/v1/firestore/*', authenticateAppToken, async (req, res) => {
 
 // --- CONSOLE FIRESTORE MANAGEMENT ---
 
-
 app.get('/v1/console/projects/:projectId/firestore/collections', authenticateToken, async (req, res) => {
     const { projectId } = req.params;
     try {
@@ -355,27 +354,40 @@ app.get('/v1/console/projects/:projectId/firestore/collections', authenticateTok
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/v1/console/projects/:projectId/firestore/:collection((?:[^/]+/)*[^/]+)/documents', authenticateToken, async (req, res) => {
-    const { projectId, collection } = req.params;
-    try {
-        const result = await pool.query(
-            'SELECT document_id FROM firestore_data WHERE project_id = $1 AND collection_name = $2 ORDER BY document_id',
-            [projectId, collection]
-        );
-        res.json(result.rows.map(row => row.document_id));
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// Unified Console Firestore Handler (Supports Deeply Nested Paths)
+app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    const fullPath = req.params[0];
+    const segments = fullPath.split('/').filter(s => s.length > 0);
 
-app.get('/v1/console/projects/:projectId/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateToken, async (req, res) => {
-    const { projectId, collection, document } = req.params;
-    try {
-        const result = await pool.query(
-            'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-            [projectId, collection, document]
-        );
-        if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
-        res.json(result.rows[0].data);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    if (segments.length === 0) return res.status(400).json({ error: "Invalid path" });
+
+    // Scenario 1: Path ends with /documents (e.g., "col1/documents" or "col1/doc1/col2/documents")
+    if (segments[segments.length - 1] === 'documents') {
+        segments.pop(); // remove 'documents'
+        const collection_name = segments.join('/');
+        try {
+            const result = await pool.query(
+                'SELECT document_id FROM firestore_data WHERE project_id = $1 AND collection_name = $2 ORDER BY document_id',
+                [projectId, collection_name]
+            );
+            res.json(result.rows.map(row => row.document_id));
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    } else {
+        // Scenario 2: Specific Document (e.g., "col1/doc1" or "col1/doc1/col2/doc2")
+        if (segments.length < 2) return res.status(400).json({ error: "Document path requires at least collection and document ID" });
+
+        const document_id = segments.pop();
+        const collection_name = segments.join('/');
+        try {
+            const result = await pool.query(
+                'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
+                [projectId, collection_name, document_id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
+            res.json(result.rows[0].data);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    }
 });
 
 
