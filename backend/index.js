@@ -249,8 +249,8 @@ const authenticateAppToken = (req, res, next) => {
     });
 };
 
-// GET Document
-app.get('/v1/firestore/:collection/:document', authenticateAppToken, async (req, res) => {
+// GET Document (Supports Nested Paths)
+app.get('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateAppToken, async (req, res) => {
     const { collection, document } = req.params;
     const { project_id } = req.app_user;
 
@@ -264,8 +264,8 @@ app.get('/v1/firestore/:collection/:document', authenticateAppToken, async (req,
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET All Documents in Collection (Developer Friendly Generic Route)
-app.get('/v1/firestore/:collection', authenticateAppToken, async (req, res) => {
+// GET All Documents in Collection (Supports Nested Paths)
+app.get('/v1/firestore/:collection((?:[^/]+/)*[^/]+)', authenticateAppToken, async (req, res) => {
     const { collection } = req.params;
     const { project_id } = req.app_user;
 
@@ -278,8 +278,8 @@ app.get('/v1/firestore/:collection', authenticateAppToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// SET Document (Overwrite)
-app.post('/v1/firestore/:collection/:document', authenticateAppToken, async (req, res) => {
+// SET Document (Supports Nested Paths)
+app.post('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateAppToken, async (req, res) => {
     const { collection, document } = req.params;
     const { project_id } = req.app_user;
     const data = req.body;
@@ -296,8 +296,8 @@ app.post('/v1/firestore/:collection/:document', authenticateAppToken, async (req
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// UPDATE Document (Merge)
-app.patch('/v1/firestore/:collection/:document', authenticateAppToken, async (req, res) => {
+// UPDATE Document (Supports Nested Paths)
+app.patch('/v1/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateAppToken, async (req, res) => {
     const { collection, document } = req.params;
     const { project_id } = req.app_user;
     const newData = req.body;
@@ -338,7 +338,7 @@ app.get('/v1/console/projects/:projectId/firestore/collections', authenticateTok
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/v1/console/projects/:projectId/firestore/:collection/documents', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/firestore/:collection((?:[^/]+/)*[^/]+)/documents', authenticateToken, async (req, res) => {
     const { projectId, collection } = req.params;
     try {
         const result = await pool.query(
@@ -349,7 +349,7 @@ app.get('/v1/console/projects/:projectId/firestore/:collection/documents', authe
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/v1/console/projects/:projectId/firestore/:collection/:document', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/firestore/:collection((?:[^/]+/)*[^/]+)/:document', authenticateToken, async (req, res) => {
     const { projectId, collection, document } = req.params;
     try {
         const result = await pool.query(
