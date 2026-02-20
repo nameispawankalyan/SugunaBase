@@ -227,13 +227,19 @@ app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Li
 
 // Check Project Status for App (Public Route)
 app.get('/v1/app/check-project/:id', async (req, res) => {
+    const projectId = req.params.id;
+    console.log(`🔍 [App] Checking status for Project ID: ${projectId}`);
     try {
-        const result = await pool.query('SELECT google_sign_in_enabled FROM projects WHERE id = $1', [req.params.id]);
+        const result = await pool.query('SELECT google_sign_in_enabled FROM projects WHERE id = $1', [projectId]);
         if (result.rows.length === 0) {
+            console.log(`❌ Project ${projectId} not found`);
             return res.json({ exists: false, active: false });
         }
-        res.json({ exists: true, active: result.rows[0].google_sign_in_enabled });
+        const active = result.rows[0].google_sign_in_enabled;
+        console.log(`✅ Project ${projectId} found. Active: ${active}`);
+        res.json({ exists: true, active: active });
     } catch (e) {
+        console.error(`🔥 Error checking project ${projectId}:`, e.message);
         res.status(500).json({ error: e.message });
     }
 });
