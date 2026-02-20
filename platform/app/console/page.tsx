@@ -26,6 +26,12 @@ export default function Dashboard() {
     const [packageName, setPackageName] = useState('');
     const [googleClientId, setGoogleClientId] = useState('');
     const [platform, setPlatform] = useState('Android');
+    const [isMounted, setIsMounted] = useState(false);
+
+    // Prevent Hydration Mismatch
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     // Auth Check
     useEffect(() => {
@@ -129,6 +135,8 @@ export default function Dashboard() {
         localStorage.removeItem('user');
         router.push('/login');
     };
+
+    if (!isMounted) return null; // Prevent Hydration Mismatch
 
     if (loading) {
         return <div className="p-8 text-center flex items-center justify-center h-screen">
