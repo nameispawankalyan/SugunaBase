@@ -38,31 +38,58 @@ Firestore is organized into **Collections** and **Documents**.
 - **Collection**: A folder (e.g., `users_profile`, `orders`)
 - **Document**: An individual JSON object with a unique ID.
 
-### **B. Deeply Nested Paths**
-You can organize data as deep as you want:
-- Path: `Wallet/Coins/Today` (Total 3 levels)
-- Document ID: `user123`
+### **B. CRUD Operations (Step-by-Step)**
 
-### **C. Dynamic Filtering**
-Search for documents based on specific fields without creating any indexes manually.
-
+#### **Step 1: Create / Overwrite (SET)**
+Use this to create a new document or completely replace an existing one.
 ```kotlin
-// Example: Get "Telugu" speaking users with "Age 25"
-val filters = hashMapOf("language" to "Telugu", "age" to "25")
+val data = hashMapOf(
+    "name" to "Pawan Kalyan",
+    "language" to "Telugu",
+    "coins" to "1000"
+)
+// Path: users_profile/unique_id
+api.setDocument(token, "users_profile", "user_123", data).enqueue(...)
+```
 
+#### **Step 2: Read Single Document (GET)**
+Fetch data for a specific document ID.
+```kotlin
+api.getDocument(token, "users_profile", "user_123").enqueue(object : Callback<Any> {
+    override fun onResponse(call: Call<Any>, response: Response<Any>) {
+        val data = response.body() // Returns your JSON as a Map
+    }
+    override fun onFailure(call: Call<Any>, t: Throwable) { /* ... */ }
+})
+```
+
+#### **Step 3: Update / Merge (PATCH)**
+Update only specific fields without deleting the rest of the document.
+```kotlin
+val update = hashMapOf("coins" to "1500") // Only updates coins
+api.updateDocument(token, "users_profile", "user_123", update).enqueue(...)
+```
+
+#### **Step 4: Read Collection with Filtering**
+Fetch multiple documents with optional filters.
+```kotlin
+// Get all Telugu users
+val filters = hashMapOf("language" to "Telugu")
 api.getCollectionDocuments(token, "users_profile", filters).enqueue(object : Callback<List<FirestoreDocument>> {
     override fun onResponse(call: Call<List<FirestoreDocument>>, response: Response<List<FirestoreDocument>>) {
-        val users = response.body() // List only contains Telugu users of age 25
+        val users = response.body() // List only contains Telugu users
     }
     override fun onFailure(call: Call<List<FirestoreDocument>>, t: Throwable) { /* ... */ }
 })
 ```
 
-### **D. Set/Save Document**
-```kotlin
-val data = hashMapOf("profile_name" to "Pawan Kalyan", "coins" to "500")
-api.setDocument(token, "users_profile", "unique_user_id", data).enqueue(...)
-```
+### **C. Deeply Nested Paths**
+You can organize data as deep as you want:
+- Path: `Wallet/Coins/Today` (Total 3 levels)
+- Document ID: `user123`
+
+### **D. Dynamic Filtering**
+Search for documents based on specific fields without creating any indexes manually.
 
 ---
 
@@ -96,7 +123,7 @@ socket.on("firestore_update") { args ->
 
 ## 🖥️ 4. Suguna Console
 Manage your database visually via the Suguna Console:
-- **URL**: [https://suguna.co](https://suguna.co)
+- **URL**: [https://www.suguna.co](https://www.suguna.co)
 - View all collections and nested documents.
 - Search and modify data in real-time.
 
