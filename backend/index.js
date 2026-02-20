@@ -264,8 +264,8 @@ app.get('/v1/firestore/:collection/:document', authenticateAppToken, async (req,
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET All Documents in Collection (Simplified Unique Route)
-app.get('/v1/all-users-list/:collection', authenticateAppToken, async (req, res) => {
+// GET All Documents in Collection (Developer Friendly Generic Route)
+app.get('/v1/firestore/:collection', authenticateAppToken, async (req, res) => {
     const { collection } = req.params;
     const { project_id } = req.app_user;
 
