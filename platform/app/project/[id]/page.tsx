@@ -15,21 +15,26 @@ const generateConfig = (projectId: string, packageName: string, googleClientId?:
             "project_number": "1",
             "endpoint": "https://api.suguna.co/v1" // Secured Endpoint
         },
-        "client": {
-            "package_name": packageName,
-            "client_id": `android:${packageName}`,
-            "oauth_client": [
-                {
-                    "client_id": googleClientId || "YOUR_WEB_CLIENT_ID",
-                    "client_type": 3
-                }
-            ],
-            "services": {
-                "sugunabase": {
-                    "base_url": "https://api.suguna.co/"
+        "client": [
+            {
+                "client_info": {
+                    "android_client_info": {
+                        "package_name": packageName
+                    }
+                },
+                "oauth_client": [
+                    {
+                        "client_id": googleClientId || "YOUR_WEB_CLIENT_ID",
+                        "client_type": 3
+                    }
+                ],
+                "services": {
+                    "sugunabase": {
+                        "base_url": "https://api.suguna.co/"
+                    }
                 }
             }
-        }
+        ]
     }
 };
 
