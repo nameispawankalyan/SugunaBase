@@ -1,4 +1,4 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.suguna.co'; // Backend API URL
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.suguna.co/v1'; // Backend API URL
 
 export const api = {
     getHeaders: () => {

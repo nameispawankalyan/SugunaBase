@@ -80,6 +80,9 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_client_id VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha1_fingerprint VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha256_fingerprint VARCHAR(255);`);
+            // User Reset Password Fields
+            await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
+            await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;`);
         } catch (e) { console.log("Migration Note:", e.message); }
         // New Table for End Users (App Users)
         await pool.query(`
@@ -129,6 +132,42 @@ app.post('/v1/auth/login', async (req, res) => {
 
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
         res.json({ user: { id: user.id, email: user.email, name: user.name }, token });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/v1/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (result.rows.length === 0) return res.json({ message: 'If email exists, reset link sent.' }); // Security: Don't reveal existence
+
+        const user = result.rows[0];
+        // Generate a random token (secure enough for now)
+        const resetToken = require('crypto').randomBytes(32).toString('hex');
+        const expiry = new Date(Date.now() + 3600000); // 1 Hour
+
+        await pool.query('UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE id = $3', [resetToken, expiry, user.id]);
+
+        // SIMULATE EMAIL SENDING
+        const resetLink = `https://suguna.co/reset-password?token=${resetToken}`;
+        console.log(`\nPassword Reset Requested for ${email}:\nLink: ${resetLink}\n`);
+
+        res.json({ message: 'If email exists, reset link sent.', debug_token: resetToken }); // Including token for testing, remove in prod!
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/v1/auth/reset-password', async (req, res) => {
+    const { token, newPassword } = req.body;
+    try {
+        const result = await pool.query("SELECT * FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()", [token]);
+        if (result.rows.length === 0) return res.status(400).json({ error: "Invalid or expired token" });
+
+        const user = result.rows[0];
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        await pool.query("UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2", [hashedPassword, user.id]);
+
+        res.json({ message: "Password updated successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
