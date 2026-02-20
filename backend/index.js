@@ -311,6 +311,43 @@ app.patch('/v1/firestore/:collection/:document', authenticateAppToken, async (re
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- CONSOLE FIRESTORE MANAGEMENT ---
+
+app.get('/v1/console/projects/:projectId/firestore/collections', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    try {
+        const result = await pool.query(
+            'SELECT DISTINCT collection_name FROM firestore_data WHERE project_id = $1 ORDER BY collection_name',
+            [projectId]
+        );
+        res.json(result.rows.map(row => row.collection_name));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/v1/console/projects/:projectId/firestore/:collection/documents', authenticateToken, async (req, res) => {
+    const { projectId, collection } = req.params;
+    try {
+        const result = await pool.query(
+            'SELECT document_id FROM firestore_data WHERE project_id = $1 AND collection_name = $2 ORDER BY document_id',
+            [projectId, collection]
+        );
+        res.json(result.rows.map(row => row.document_id));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/v1/console/projects/:projectId/firestore/:collection/:document', authenticateToken, async (req, res) => {
+    const { projectId, collection, document } = req.params;
+    try {
+        const result = await pool.query(
+            'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
+            [projectId, collection, document]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
+        res.json(result.rows[0].data);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 
 
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
