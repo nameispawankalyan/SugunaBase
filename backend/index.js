@@ -12,6 +12,11 @@ const server = http.createServer(app);
 const port = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'suguna_secret_key';
 
+// Root Route for Identification
+app.get('/', (req, res) => {
+    res.send('SugunaBase Backend API is Running on Port ' + port);
+});
+
 // 1. Setup Socket.io
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
