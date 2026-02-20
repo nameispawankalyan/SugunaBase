@@ -32,7 +32,8 @@ pm2 save
 echo "⚙️ Configuring Nginx..."
 sudo tee /etc/nginx/sites-available/suguna > /dev/null <<EOT
 server {
-    server_name suguna.co www.suguna.co;
+    listen 80 default_server;
+    server_name suguna.co www.suguna.co console.suguna.co;
 
     location / {
         proxy_pass http://localhost:3000;
@@ -45,6 +46,7 @@ server {
 }
 
 server {
+    listen 80;
     server_name api.suguna.co;
 
     location / {
