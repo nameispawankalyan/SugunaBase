@@ -83,6 +83,8 @@ const initDB = async () => {
             // User Reset Password Fields
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;`);
+            // Firestore migration
+            await pool.query(`ALTER TABLE firestore_data ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
         } catch (e) { console.log("Migration Note:", e.message); }
         // New Table for End Users (App Users)
         await pool.query(`
@@ -106,6 +108,7 @@ const initDB = async () => {
                 collection_name VARCHAR(100) NOT NULL,
                 document_id VARCHAR(255) NOT NULL,
                 data JSONB NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(project_id, collection_name, document_id)
             );
