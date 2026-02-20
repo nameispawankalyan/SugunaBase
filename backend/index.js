@@ -249,7 +249,7 @@ const authenticateAppToken = (req, res, next) => {
     });
 };
 
-// Unified Firestore Handler (Supports Deeply Nested Paths)
+// Unified Firestore Handler (Supports Deeply Nested Paths & Dynamic Filtering)
 app.get('/v1/firestore/*', authenticateAppToken, async (req, res) => {
     const fullPath = req.params[0];
     const segments = fullPath.split('/').filter(s => s.length > 0);
@@ -257,11 +257,8 @@ app.get('/v1/firestore/*', authenticateAppToken, async (req, res) => {
 
     if (segments.length === 0) return res.status(400).json({ error: "Invalid path" });
 
-    // If segments are EVEN, it's a Document request (col/doc/col/doc)
-    // If segments are ODD, it's a Collection request (col/doc/col)
-
     if (segments.length % 2 === 0) {
-        // Document Request
+        // --- Document Request ---
         const document_id = segments.pop();
         const collection_name = segments.join('/');
         try {
@@ -273,13 +270,22 @@ app.get('/v1/firestore/*', authenticateAppToken, async (req, res) => {
             res.json(result.rows[0].data);
         } catch (e) { res.status(500).json({ error: e.message }); }
     } else {
-        // Collection Request
+        // --- Collection Request (With Dynamic Filtering) ---
         const collection_name = segments.join('/');
+        let queryText = 'SELECT document_id, data FROM firestore_data WHERE project_id = $1 AND collection_name = $2';
+        const queryParams = [project_id, collection_name];
+
+        // Dynamic Filtering: ?language=Telugu&age=25
+        const filters = Object.keys(req.query);
+        filters.forEach((key, index) => {
+            queryText += ` AND data->>'${key}' = $${index + 3}`;
+            queryParams.push(req.query[key]);
+        });
+
+        queryText += ' ORDER BY created_at DESC';
+
         try {
-            const result = await pool.query(
-                'SELECT document_id, data FROM firestore_data WHERE project_id = $1 AND collection_name = $2',
-                [project_id, collection_name]
-            );
+            const result = await pool.query(queryText, queryParams);
             res.json(result.rows);
         } catch (e) { res.status(500).json({ error: e.message }); }
     }
@@ -291,7 +297,7 @@ app.post('/v1/firestore/*', authenticateAppToken, async (req, res) => {
     const { project_id } = req.app_user;
     const data = req.body;
 
-    if (segments.length % 2 !== 0) return res.status(400).json({ error: "POST requires a full document path (even segments)" });
+    if (segments.length % 2 !== 0) return res.status(400).json({ error: "POST requires a full document path" });
 
     const document_id = segments.pop();
     const collection_name = segments.join('/');
@@ -304,6 +310,15 @@ app.post('/v1/firestore/*', authenticateAppToken, async (req, res) => {
              DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
             [project_id, collection_name, document_id, JSON.stringify(data)]
         );
+
+        // Notify Subscribers (Real-time Room)
+        io.to(`project_${project_id}_${collection_name}`).emit('firestore_update', {
+            type: 'set',
+            collection: collection_name,
+            document_id: document_id,
+            data: data
+        });
+
         res.json({ message: "Document Saved", collection_name, document_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -314,7 +329,7 @@ app.patch('/v1/firestore/*', authenticateAppToken, async (req, res) => {
     const { project_id } = req.app_user;
     const newData = req.body;
 
-    if (segments.length % 2 !== 0) return res.status(400).json({ error: "PATCH requires a full document path (even segments)" });
+    if (segments.length % 2 !== 0) return res.status(400).json({ error: "PATCH requires a full document path" });
 
     const document_id = segments.pop();
     const collection_name = segments.join('/');
@@ -337,6 +352,15 @@ app.patch('/v1/firestore/*', authenticateAppToken, async (req, res) => {
              DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
             [project_id, collection_name, document_id, JSON.stringify(finalData)]
         );
+
+        // Notify Subscribers (Real-time Room)
+        io.to(`project_${project_id}_${collection_name}`).emit('firestore_update', {
+            type: 'update',
+            collection: collection_name,
+            document_id: document_id,
+            data: finalData
+        });
+
         res.json({ message: "Document Merged", collection_name, document_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -559,13 +583,26 @@ app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Socket Connection (Join Room by User ID)
+// Socket.io Connection Logic (Enhanced for Rooms)
 io.on('connection', (socket) => {
-    // Client sends token to authenticate socket? For now, we simple-broadcast or we can improve later.
-    // Ideally client joins room: socket.join(userId)
-    // For now, let's keep it simple or implement a 'join' event from client
-    socket.on('join', (userId) => {
-        socket.join(userId);
+    console.log('🔌 [Socket] Client connected:', socket.id);
+
+    // Subscribe to a specific collection (Dynamic Real-time)
+    socket.on('subscribe_collection', ({ project_id, collection }) => {
+        const room = `project_${project_id}_${collection}`;
+        socket.join(room);
+        console.log(`📡 [Socket] Client ${socket.id} subscribed to ${room}`);
+    });
+
+    // Unsubscribe
+    socket.on('unsubscribe_collection', ({ project_id, collection }) => {
+        const room = `project_${project_id}_${collection}`;
+        socket.leave(room);
+        console.log(`📡 [Socket] Client ${socket.id} unsubscribed from ${room}`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('🔌 [Socket] Client disconnected');
     });
 });
 
