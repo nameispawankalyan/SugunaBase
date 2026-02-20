@@ -8,6 +8,7 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
     const { id } = use(params);
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState(''); // Search State
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -42,6 +43,16 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
         setTimeout(() => setCopiedId(null), 2000);
     };
 
+    // Filtered Users Logic
+    const filteredUsers = users.filter(user => {
+        const query = searchQuery.toLowerCase();
+        return (
+            (user.email && user.email.toLowerCase().includes(query)) ||
+            (user.name && user.name.toLowerCase().includes(query)) ||
+            (user.id && user.id.toLowerCase().includes(query))
+        );
+    });
+
     return (
         <div className="space-y-6">
 
@@ -74,6 +85,8 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
                         type="text"
                         placeholder="Search by email, phone, or UID"
                         className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
                 <div className="flex gap-3">
@@ -94,7 +107,7 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
                         <span className="text-sm">Loading users...</span>
                     </div>
-                ) : users.length > 0 ? (
+                ) : filteredUsers.length > 0 ? (
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
@@ -106,7 +119,7 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {users.map((user) => (
+                            {filteredUsers.map((user) => (
                                 <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex items-center">
@@ -180,11 +193,17 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
                         <div className="bg-gray-50 p-6 rounded-full mb-4">
                             <UsersIconPlaceholder />
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-900">No users yet</h3>
-                        <p className="text-gray-500 max-w-sm mt-2 mb-8 text-sm">Users will appear here once they sign up in your app.</p>
-                        <button className="text-blue-600 font-medium hover:text-blue-700 hover:underline flex items-center gap-1 text-sm">
-                            Learn how to add users <span aria-hidden="true">&rarr;</span>
-                        </button>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                            {users.length === 0 ? "No users yet" : "No matching users found"}
+                        </h3>
+                        <p className="text-gray-500 max-w-sm mt-2 mb-8 text-sm">
+                            {users.length === 0 ? "Users will appear here once they sign up in your app." : "Try adjusting your search query."}
+                        </p>
+                        {users.length === 0 && (
+                            <button className="text-blue-600 font-medium hover:text-blue-700 hover:underline flex items-center gap-1 text-sm">
+                                Learn how to add users <span aria-hidden="true">&rarr;</span>
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
