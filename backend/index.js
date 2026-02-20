@@ -99,7 +99,18 @@ const initDB = async () => {
                 UNIQUE(project_id, email) -- Email unique per project
             );
         `);
-        console.log("✅ Database Tables Initialized");
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS firestore_data (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                collection_name VARCHAR(100) NOT NULL,
+                document_id VARCHAR(255) NOT NULL,
+                data JSONB NOT NULL DEFAULT '{}',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, collection_name, document_id)
+            );
+        `);
+        console.log("✅ Database Tables Initialized (including SugunaFirestore)");
     } catch (err) {
         console.error("❌ DB Init Error:", err);
     }
@@ -221,6 +232,85 @@ app.post('/v1/auth/app-login', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
+// --- SUGUNA FIRESTORE API (Generic Document Store) ---
+
+// App User Middleware (Verify App Token)
+const authenticateAppToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(401).json({ error: "No Token Provided" });
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) return res.status(403).json({ error: "Invalid App Token" });
+        req.app_user = decoded; // Contains app_user_id and project_id
+        next();
+    });
+};
+
+// GET Document
+app.get('/v1/firestore/:collection/:document', authenticateAppToken, async (req, res) => {
+    const { collection, document } = req.params;
+    const { project_id } = req.app_user;
+
+    try {
+        const result = await pool.query(
+            'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
+            [project_id, collection, document]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
+        res.json(result.rows[0].data);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// SET Document (Overwrite)
+app.post('/v1/firestore/:collection/:document', authenticateAppToken, async (req, res) => {
+    const { collection, document } = req.params;
+    const { project_id } = req.app_user;
+    const data = req.body;
+
+    try {
+        await pool.query(
+            `INSERT INTO firestore_data (project_id, collection_name, document_id, data) 
+             VALUES ($1, $2, $3, $4) 
+             ON CONFLICT (project_id, collection_name, document_id) 
+             DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
+            [project_id, collection, document, JSON.stringify(data)]
+        );
+        res.json({ message: "Document Saved", collection, document });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// UPDATE Document (Merge)
+app.patch('/v1/firestore/:collection/:document', authenticateAppToken, async (req, res) => {
+    const { collection, document } = req.params;
+    const { project_id } = req.app_user;
+    const newData = req.body;
+
+    try {
+        // Fetch current data
+        const current = await pool.query(
+            'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
+            [project_id, collection, document]
+        );
+
+        let finalData = newData;
+        if (current.rows.length > 0) {
+            finalData = { ...current.rows[0].data, ...newData };
+        }
+
+        await pool.query(
+            `INSERT INTO firestore_data (project_id, collection_name, document_id, data) 
+             VALUES ($1, $2, $3, $4) 
+             ON CONFLICT (project_id, collection_name, document_id) 
+             DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
+            [project_id, collection, document, JSON.stringify(finalData)]
+        );
+        res.json({ message: "Document Merged", collection, document });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
