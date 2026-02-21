@@ -93,10 +93,8 @@ server {
 }
 EOT
 
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo rm -f /etc/nginx/sites-enabled/suguna_main
-sudo rm -f /etc/nginx/sites-enabled/suguna_api
-sudo ln -sf /etc/nginx/sites-available/suguna /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/*
+sudo ln -sf /etc/nginx/sites-available/suguna /etc/nginx/sites-enabled/suguna
 
 # 6. Check Nginx and Restart
 sudo nginx -t
