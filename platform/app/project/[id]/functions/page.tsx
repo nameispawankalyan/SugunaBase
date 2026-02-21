@@ -4,7 +4,7 @@ import { use, useEffect, useState } from 'react';
 import {
     FileCode, Loader2, Play, ExternalLink, Terminal, Plus, Trash2,
     X, AlertTriangle, Clock, Globe, Database, MoreVertical,
-    ChevronRight, Hash, Activity, RefreshCw, Layers, Copy, Check, Timer
+    ChevronRight, Hash, Activity, RefreshCw, Layers, Copy, Check, Timer, Zap, Send
 } from 'lucide-react';
 
 export default function FunctionsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -14,6 +14,7 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
     const [error, setError] = useState('');
     const [deleteModal, setDeleteModal] = useState<{ open: boolean, name: string }>({ open: false, name: '' });
     const [logModal, setLogModal] = useState<{ open: boolean, name: string, data: any[] }>({ open: false, name: '', data: [] });
+    const [testModal, setTestModal] = useState<{ open: boolean, name: string, input: string, output: string, loading: boolean }>({ open: false, name: '', input: '{}', output: '', loading: false });
     const [deleting, setDeleting] = useState(false);
     const [fetchingLogs, setFetchingLogs] = useState(false);
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -56,6 +57,30 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
         }
     };
 
+    const handleTestRun = async () => {
+        setTestModal(prev => ({ ...prev, loading: true, output: '' }));
+        const token = localStorage.getItem('token');
+        try {
+            let payload = {};
+            try { payload = JSON.parse(testModal.input); } catch (e) { }
+
+            const res = await fetch(`https://api.suguna.co/functions/run/${id}/${testModal.name}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            setTestModal(prev => ({ ...prev, output: JSON.stringify(data, null, 2), loading: false }));
+            // Refresh counts
+            fetchFunctions();
+        } catch (err: any) {
+            setTestModal(prev => ({ ...prev, output: "Error: " + err.message, loading: false }));
+        }
+    };
+
     const handleDelete = async () => {
         const token = localStorage.getItem('token');
         setDeleting(true);
@@ -86,7 +111,6 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
         fetchFunctions();
     }, [id]);
 
-    // Close menu when clicking outside
     useEffect(() => {
         const handleOutsideClick = (e: MouseEvent) => {
             if (!(e.target as HTMLElement).closest('.menu-container')) {
@@ -117,6 +141,67 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
 
     return (
         <div className="p-0 animate-in fade-in duration-500">
+            {/* Test Run Modal */}
+            {testModal.open && (
+                <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-emerald-50 rounded-2xl">
+                                    <Zap className="h-6 w-6 text-emerald-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Test Run</h3>
+                                    <p className="text-xs text-gray-400 font-bold font-mono">Function: {testModal.name}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setTestModal({ open: false, name: '', input: '{}', output: '', loading: false })} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                                <X className="h-6 w-6 text-gray-400" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 overflow-hidden">
+                            <div className="flex flex-col space-y-3">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Request Body (JSON)</label>
+                                <textarea
+                                    value={testModal.input}
+                                    onChange={(e) => setTestModal(prev => ({ ...prev, input: e.target.value }))}
+                                    className="flex-1 p-4 bg-gray-50 border border-gray-200 rounded-2xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all resize-none"
+                                />
+                            </div>
+                            <div className="flex flex-col space-y-3">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Response Output</label>
+                                <div className="flex-1 p-4 bg-gray-900 border border-gray-800 rounded-2xl font-mono text-sm text-emerald-400 overflow-auto whitespace-pre">
+                                    {testModal.loading ? (
+                                        <div className="flex items-center gap-3 animate-pulse">
+                                            <div className="h-2 w-2 bg-emerald-500 rounded-full animate-bounce"></div>
+                                            Executing...
+                                        </div>
+                                    ) : testModal.output || "// Result will appear here"}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 flex gap-3">
+                            <button
+                                onClick={handleTestRun}
+                                disabled={testModal.loading}
+                                className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-black text-sm hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-3 shadow-xl"
+                            >
+                                {testModal.loading ? <Loader2 className="animate-spin h-5 w-5" /> : <Send className="h-4 w-4" />}
+                                RUN TEST NOW
+                            </button>
+                            <button
+                                onClick={() => setTestModal({ open: false, name: '', input: '{}', output: '', loading: false })}
+                                className="px-8 py-4 bg-gray-100 text-gray-600 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
+                            >
+                                CLOSE
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Delete Modal */}
             {deleteModal.open && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
@@ -127,7 +212,7 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
                             </div>
                             <div className="space-y-2">
                                 <h3 className="text-2xl font-black text-gray-900 uppercase">Delete Function?</h3>
-                                <p className="text-gray-500 text-sm font-medium">
+                                <p className="text-gray-500 text-sm font-medium leading-relaxed">
                                     Deleting <span className="font-bold text-red-600">"{deleteModal.name}"</span> is permanent.
                                     This action cannot be undone.
                                 </p>
@@ -217,7 +302,7 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
                             <span className="text-[11px] font-black uppercase tracking-[4px]">Cloud Engine Dashboard</span>
                         </div>
                         <h1 className="text-5xl font-black text-gray-900 tracking-tighter">Functions</h1>
-                        <p className="text-lg text-gray-500 font-medium">Deploy and manage your mission-critical edge functions.</p>
+                        <p className="text-lg text-gray-500 font-medium tracking-tight">Deploy and manage your mission-critical edge functions.</p>
                     </div>
                     <button className="px-8 py-4 bg-gray-900 text-white rounded-[1.25rem] font-black text-sm hover:scale-[1.05] active:scale-95 transition-all shadow-2xl shadow-black/20 flex items-center gap-3 hover:bg-black uppercase tracking-wider">
                         <Plus className="h-5 w-5" />
@@ -341,8 +426,8 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
                                                                 <div className="p-1.5 bg-purple-50 rounded-lg"><Terminal className="h-4 w-4 text-purple-600" /></div>
                                                                 View Logs
                                                             </button>
-                                                            <button className="w-full px-5 py-3 text-left text-[13px] font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-4 transition-all hover:translate-x-1">
-                                                                <div className="p-1.5 bg-emerald-50 rounded-lg"><Play className="h-4 w-4 text-emerald-600" /></div>
+                                                            <button onClick={() => { setTestModal({ open: true, name: fn.name, input: '{}', output: '', loading: false }); setActiveMenu(null); }} className="w-full px-5 py-3 text-left text-[13px] font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-4 transition-all hover:translate-x-1">
+                                                                <div className="p-1.5 bg-emerald-50 rounded-lg"><Zap className="h-4 w-4 text-emerald-600" /></div>
                                                                 Test Run
                                                             </button>
                                                             <button className="w-full px-5 py-3 text-left text-[13px] font-bold text-gray-400 hover:bg-gray-50 flex items-center gap-4 transition-all opacity-50 cursor-not-allowed">
