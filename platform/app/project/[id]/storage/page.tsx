@@ -13,6 +13,7 @@ export default function StoragePage() {
     const [selectedFile, setSelectedFile] = useState<any | null>(null);
     const [copiedName, setCopiedName] = useState<boolean>(false);
     const [copiedPath, setCopiedPath] = useState<boolean>(false);
+    const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
     const [mockTokens, setMockTokens] = useState<string[]>([]);
     const [copiedTokenIdx, setCopiedTokenIdx] = useState<number | null>(null);
 
