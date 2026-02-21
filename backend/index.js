@@ -470,7 +470,8 @@ app.post('/v1/storage/upload', authenticateAppToken, upload.single('file'), asyn
         const file_type = req.file.mimetype;
         const file_size = req.file.size;
 
-        const fileUrl = `${req.protocol}://${req.get('host')}/storage/${project_id}/${folder_path ? folder_path + '/' : ''}${file_name}`;
+        const token = require('crypto').randomUUID(); // generate a token format like Firebase
+        const fileUrl = `${req.protocol}://${req.get('host')}/storage/${project_id}/${folder_path ? folder_path + '/' : ''}${file_name}?alt=media&token=${token}`;
 
         const result = await pool.query(
             `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
