@@ -149,4 +149,10 @@ fun deleteStorageItems(@Header("Authorization") token: String, @Path("id") proje
 ```
 
 ---
+
+## 🖥️ 4. Suguna Console
+Manage your projects, auth, database, and storage visually:
+- **Project URL**: [https://www.suguna.co](https://www.suguna.co)
+
+---
 **Build with Confidence on SugunaBase!** 🚀
