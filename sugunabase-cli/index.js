@@ -3,7 +3,6 @@ const { program } = require('commander');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const os = require('os');
 const http = require('http');
 const archiver = require('archiver');
 const FormData = require('form-data');
