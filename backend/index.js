@@ -5,6 +5,9 @@ const http = require('http');
 const { Server } = require("socket.io");
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -32,6 +35,12 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+
+const uploadDir = path.join(__dirname, 'storage_uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+app.use('/storage', express.static(uploadDir));
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
@@ -111,6 +120,19 @@ const initDB = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(project_id, collection_name, document_id)
+            );
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS storage_files (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                folder_path VARCHAR(255) DEFAULT '',
+                file_name VARCHAR(255) NOT NULL,
+                file_url TEXT NOT NULL,
+                file_type VARCHAR(100),
+                file_size INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
         console.log("✅ Database Tables Initialized (including SugunaFirestore)");
@@ -412,6 +434,56 @@ app.delete('/v1/firestore/*', authenticateAppToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- SUGUNA STORAGE API (File Uploads) ---
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        let folderPath = req.body.folder_path || '';
+        const projectDir = path.join(uploadDir, String(req.app_user ? req.app_user.project_id : 'shared'), folderPath);
+        if (!fs.existsSync(projectDir)) {
+            fs.mkdirSync(projectDir, { recursive: true });
+        }
+        cb(null, projectDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
+app.post('/v1/storage/upload', authenticateAppToken, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+        const { project_id } = req.app_user;
+        const folder_path = req.body.folder_path || '';
+        const file_name = req.file.filename;
+        const file_type = req.file.mimetype;
+        const file_size = req.file.size;
+
+        const fileUrl = `${req.protocol}://${req.get('host')}/storage/${project_id}/${folder_path ? folder_path + '/' : ''}${file_name}`;
+
+        const result = await pool.query(
+            `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [project_id, folder_path, file_name, fileUrl, file_type, file_size]
+        );
+
+        res.json({ message: "File Uploaded Successfully", data: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/v1/console/projects/:projectId/storage', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM storage_files WHERE project_id = $1 ORDER BY created_at DESC',
+            [projectId]
+        );
+        res.json(result.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- CONSOLE FIRESTORE MANAGEMENT ---
 
 app.get('/v1/console/projects/:projectId/firestore/collections', authenticateToken, async (req, res) => {
@@ -469,7 +541,7 @@ app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Li
 // Check Project Status for App (Public Route)
 app.get('/v1/app/check-project/:id', async (req, res) => {
     const projectId = req.params.id;
-    console.log(`🔍 [App] Checking status for Project ID: ${projectId}`);
+    console.log(`🔍[App] Checking status for Project ID: ${projectId} `);
     try {
         const result = await pool.query('SELECT google_sign_in_enabled FROM projects WHERE id = $1', [projectId]);
         if (result.rows.length === 0) {
@@ -477,10 +549,10 @@ app.get('/v1/app/check-project/:id', async (req, res) => {
             return res.json({ exists: false, active: false });
         }
         const active = result.rows[0].google_sign_in_enabled;
-        console.log(`✅ Project ${projectId} found. Active: ${active}`);
+        console.log(`✅ Project ${projectId} found.Active: ${active} `);
         res.json({ exists: true, active: active });
     } catch (e) {
-        console.error(`🔥 Error checking project ${projectId}:`, e.message);
+        console.error(`🔥 Error checking project ${projectId}: `, e.message);
         res.status(500).json({ error: e.message });
     }
 });
@@ -636,16 +708,16 @@ io.on('connection', (socket) => {
 
     // Subscribe to a specific collection (Dynamic Real-time)
     socket.on('subscribe_collection', ({ project_id, collection }) => {
-        const room = `project_${project_id}_${collection}`;
+        const room = `project_${project_id}_${collection} `;
         socket.join(room);
-        console.log(`📡 [Socket] Client ${socket.id} subscribed to ${room}`);
+        console.log(`📡[Socket] Client ${socket.id} subscribed to ${room} `);
     });
 
     // Unsubscribe
     socket.on('unsubscribe_collection', ({ project_id, collection }) => {
-        const room = `project_${project_id}_${collection}`;
+        const room = `project_${project_id}_${collection} `;
         socket.leave(room);
-        console.log(`📡 [Socket] Client ${socket.id} unsubscribed from ${room}`);
+        console.log(`📡[Socket] Client ${socket.id} unsubscribed from ${room} `);
     });
 
     socket.on('disconnect', () => {
@@ -662,4 +734,4 @@ app.use((req, res) => {
     });
 });
 
-server.listen(port, () => console.log(`🚀 SugunaBase Server running on port ${port}`));
+server.listen(port, () => console.log(`🚀 SugunaBase Server running on port ${port} `));
