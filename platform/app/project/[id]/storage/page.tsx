@@ -18,6 +18,8 @@ export default function StoragePage() {
     const [copiedTokenIdx, setCopiedTokenIdx] = useState<number | null>(null);
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
+    const [newFolderName, setNewFolderName] = useState<string>('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -230,13 +232,10 @@ export default function StoragePage() {
                     <div className="flex gap-2">
                         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
                         <button
-                            onClick={() => {
-                                const Name = prompt('Enter new folder name:');
-                                if (Name) alert('Folder Creation UI Action Initiated!\n(Note: Simulated for now)');
-                            }}
+                            onClick={() => setIsCreatingFolder(true)}
                             className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 transition shadow-sm border border-gray-200">
                             <Folder className="h-4 w-4" />
-                            Create Folder
+                            Create folder
                         </button>
                         <button
                             onClick={() => fileInputRef.current?.click()}
@@ -266,6 +265,47 @@ export default function StoragePage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 bg-white">
+                                {isCreatingFolder && (
+                                    <tr className="bg-gray-50/80 border-b shadow-inner">
+                                        <td colSpan={5} className="px-6 py-6 border-b">
+                                            <div className="flex flex-col w-full">
+                                                <label className="text-xs font-semibold text-gray-500 mb-2">Folder name</label>
+                                                <div className="flex flex-col gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newFolderName}
+                                                        onChange={(e) => setNewFolderName(e.target.value)}
+                                                        className="w-full bg-transparent border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                                                        placeholder="Folder name"
+                                                        autoFocus
+                                                    />
+                                                    <div className="flex items-center justify-end gap-6 mt-4">
+                                                        <button
+                                                            onClick={() => {
+                                                                setIsCreatingFolder(false);
+                                                                setNewFolderName('');
+                                                            }}
+                                                            className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                alert(`Folder '${newFolderName}' simulation created!`);
+                                                                setIsCreatingFolder(false);
+                                                                setNewFolderName('');
+                                                            }}
+                                                            disabled={!newFolderName.trim()}
+                                                            className={`text-sm font-medium transition-colors ${!newFolderName.trim() ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-800'}`}
+                                                        >
+                                                            Add folder
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
                                 {loading ? (
                                     <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500">Loading files...</td></tr>
                                 ) : error ? (
