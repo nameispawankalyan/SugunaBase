@@ -108,6 +108,17 @@ export default function StoragePage() {
             // Remove trailing slashes if any
             if (fPath.endsWith('/')) fPath = fPath.slice(0, -1);
 
+            if (f.is_mock_folder) {
+                if (currentPath === '' || fPath.startsWith(currentPath + '/')) {
+                    let remainingPath = currentPath === '' ? fPath : fPath.substring(currentPath.length + 1);
+                    let folderName = remainingPath.split('/')[0];
+                    if (folderName) {
+                        folders.add(folderName);
+                    }
+                }
+                return;
+            }
+
             if (fPath === currentPath) {
                 // It's a file in the current directory
                 files.push({ ...f, isFolder: false });
@@ -280,8 +291,8 @@ export default function StoragePage() {
                                                         autoFocus
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Enter' && newFolderName.trim()) {
-                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}/.keep` : `${newFolderName.trim()}/.keep`;
-                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '.keep', file_size: 0 }]);
+                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}` : newFolderName.trim();
+                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '', file_size: 0, is_mock_folder: true }]);
                                                                 setIsCreatingFolder(false);
                                                                 setNewFolderName('');
                                                             }
@@ -299,8 +310,8 @@ export default function StoragePage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
-                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}/.keep` : `${newFolderName.trim()}/.keep`;
-                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '.keep', file_size: 0 }]);
+                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}` : newFolderName.trim();
+                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '', file_size: 0, is_mock_folder: true }]);
                                                                 setIsCreatingFolder(false);
                                                                 setNewFolderName('');
                                                             }}
