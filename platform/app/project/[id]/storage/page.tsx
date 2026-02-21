@@ -1,6 +1,6 @@
 'use client';
 
-import { UploadCloud, Folder, File, Image as ImageIcon, Video, Search, Grid, MoreVertical, ChevronRight, X, Link as LinkIcon, Download } from 'lucide-react';
+import { UploadCloud, Folder, File, Image as ImageIcon, Video, Search, Grid, MoreVertical, ChevronRight, X, Link as LinkIcon, Download, Copy, Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 
@@ -11,6 +11,8 @@ export default function StoragePage() {
     const [error, setError] = useState<string | null>(null);
     const [currentPath, setCurrentPath] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<any | null>(null);
+    const [copiedName, setCopiedName] = useState<boolean>(false);
+    const [copiedPath, setCopiedPath] = useState<boolean>(false);
 
     useEffect(() => {
         fetchFiles();
@@ -46,6 +48,17 @@ export default function StoragePage() {
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    };
+
+    const copyToClipboard = (text: string, type: 'name' | 'path') => {
+        navigator.clipboard.writeText(text);
+        if (type === 'name') {
+            setCopiedName(true);
+            setTimeout(() => setCopiedName(false), 2000);
+        } else {
+            setCopiedPath(true);
+            setTimeout(() => setCopiedPath(false), 2000);
+        }
     };
 
     // Calculate items for current path
@@ -205,7 +218,7 @@ export default function StoragePage() {
                     </div>
                     <div className="p-6 overflow-y-auto flex-1 space-y-6">
                         {selectedFile.file_type?.startsWith('image/') ? (
-                            <div className="w-full h-48 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden border">
+                            <div className="w-full h-48 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden border p-2">
                                 <img src={selectedFile.file_url} alt={selectedFile.file_name} className="max-w-full max-h-full object-contain" />
                             </div>
                         ) : selectedFile.file_type?.startsWith('video/') ? (
@@ -221,9 +234,18 @@ export default function StoragePage() {
                         <div className="space-y-4">
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Name</label>
-                                <a href={selectedFile.file_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline break-all">
-                                    {selectedFile.file_name}
-                                </a>
+                                <div className="flex items-center gap-2 group">
+                                    <a href={selectedFile.file_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline break-all" title="Click to view file in new tab">
+                                        {selectedFile.file_name}
+                                    </a>
+                                    <button
+                                        onClick={() => copyToClipboard(selectedFile.file_name, 'name')}
+                                        className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-all flex-shrink-0"
+                                        title="Copy name"
+                                    >
+                                        {copiedName ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                                    </button>
+                                </div>
                             </div>
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Size</label>
@@ -243,8 +265,17 @@ export default function StoragePage() {
                             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">File Location</label>
 
                             <div className="space-y-3">
-                                <div>
-                                    <span className="text-xs text-gray-500 block mb-1">Storage path</span>
+                                <div className="group relative">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="text-xs text-gray-500 block">Storage location</span>
+                                        <button
+                                            onClick={() => copyToClipboard(`gs://suguna-base-project-${params.id}.appspot.com/${selectedFile.folder_path ? selectedFile.folder_path + '/' : ''}${selectedFile.file_name}`, 'path')}
+                                            className="p-1 opacity-0 group-hover:opacity-100 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-all"
+                                            title="Copy path"
+                                        >
+                                            {copiedPath ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                                        </button>
+                                    </div>
                                     <p className="text-sm text-gray-800 font-mono bg-gray-50 p-2 rounded border break-all">
                                         gs://suguna-base-project-{params.id}.appspot.com/{selectedFile.folder_path ? selectedFile.folder_path + '/' : ''}{selectedFile.file_name}
                                     </p>
@@ -263,9 +294,9 @@ export default function StoragePage() {
 
                                 <div className="mt-4 pt-4 border-t">
                                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">Other Metadata</label>
-                                    <a href={selectedFile.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium">
+                                    <a href={selectedFile.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium group">
                                         <Download className="h-3 w-3" />
-                                        Direct file download link
+                                        <span>Direct file view/download link</span>
                                     </a>
                                 </div>
                             </div>
