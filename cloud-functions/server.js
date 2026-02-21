@@ -8,6 +8,8 @@ const multer = require('multer');
 const unzipper = require('unzipper');
 
 const app = express();
+const cors = require('cors');
+app.use(cors());
 app.use(express.json());
 
 const FUNCS_DIR = path.join(__dirname, 'functions');
