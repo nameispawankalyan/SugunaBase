@@ -16,7 +16,7 @@ export default function StoragePage() {
 
     const fetchFiles = async () => {
         try {
-            const token = localStorage.getItem('sugunabase_token');
+            const token = localStorage.getItem('token');
             const res = await fetch(`https://api.suguna.co/v1/console/projects/${params.id}/storage`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -84,6 +84,8 @@ export default function StoragePage() {
                     <tbody className="divide-y divide-gray-200 bg-white">
                         {loading ? (
                             <tr><td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">Loading files...</td></tr>
+                        ) : error ? (
+                            <tr><td colSpan={6} className="px-6 py-4 text-center text-sm text-red-500">Error: {error}</td></tr>
                         ) : files.length === 0 ? (
                             <tr><td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">No files uploaded yet. Upload from your app to see them here!</td></tr>
                         ) : files.map((file) => (
