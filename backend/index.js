@@ -145,14 +145,21 @@ const initDB = async () => {
                 project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
                 name VARCHAR(255) NOT NULL,
                 runtime VARCHAR(50) DEFAULT 'nodejs',
-                trigger_type VARCHAR(50) DEFAULT 'http', -- http, schedule, firestore
-                trigger_value TEXT, -- URL, cron string, or document path
+                trigger_type VARCHAR(50) DEFAULT 'http',
+                trigger_value TEXT,
+                region VARCHAR(100) DEFAULT 'asia-south1',
+                timeout_seconds INTEGER DEFAULT 60,
                 status VARCHAR(50) DEFAULT 'active',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(project_id, name)
             );
         `);
+        // Migration: Add columns if they don't exist
+        try {
+            await pool.query("ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS region VARCHAR(100) DEFAULT 'asia-south1';");
+            await pool.query("ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS timeout_seconds INTEGER DEFAULT 60;");
+        } catch (e) { }
         await pool.query(`
             CREATE TABLE IF NOT EXISTS function_logs (
                 id SERIAL PRIMARY KEY,
@@ -878,14 +885,19 @@ app.delete('/v1/console/projects/:projectId/functions/:name', authenticateToken,
 
 // Internal Route: Register Function
 app.post('/v1/internal/functions/register', async (req, res) => {
-    const { projectId, name, runtime, triggerType, triggerValue } = req.body;
+    const { projectId, name, runtime, triggerType, triggerValue, region, timeout } = req.body;
     try {
         await pool.query(`
-            INSERT INTO functions_deployments (project_id, name, runtime, trigger_type, trigger_value, updated_at)
-            VALUES ($1, $2, $3, $4, $5, NOW())
+            INSERT INTO functions_deployments (project_id, name, runtime, trigger_type, trigger_value, region, timeout_seconds, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
             ON CONFLICT (project_id, name) DO UPDATE 
-            SET trigger_type = EXCLUDED.trigger_type, trigger_value = EXCLUDED.trigger_value, updated_at = NOW(), status = 'active'
-        `, [projectId, name, runtime || 'nodejs', triggerType || 'http', triggerValue]);
+            SET trigger_type = EXCLUDED.trigger_type, 
+                trigger_value = EXCLUDED.trigger_value,
+                region = COALESCE(EXCLUDED.region, functions_deployments.region),
+                timeout_seconds = COALESCE(EXCLUDED.timeout_seconds, functions_deployments.timeout_seconds),
+                updated_at = NOW(), 
+                status = 'active'
+        `, [projectId, name, runtime || 'nodejs', triggerType || 'http', triggerValue, region || 'asia-south1', timeout || 60]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
