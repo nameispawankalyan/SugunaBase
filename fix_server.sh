@@ -49,7 +49,7 @@ server {
     server_name api.suguna.co;
     client_max_body_size 100M;
 
-    location /functions/ {
+    location ^~ /functions/ {
         proxy_pass http://localhost:3005/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -73,7 +73,7 @@ server {
     listen 80;
     server_name suguna.co www.suguna.co console.suguna.co;
 
-    location /functions/ {
+    location ^~ /functions/ {
         proxy_pass http://localhost:3005/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
