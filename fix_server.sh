@@ -93,6 +93,7 @@ server {
 }
 EOT
 
+sudo rm -f /etc/nginx/sites-available/*-le-ssl.conf
 sudo rm -f /etc/nginx/sites-enabled/*
 sudo ln -sf /etc/nginx/sites-available/suguna /etc/nginx/sites-enabled/suguna
 
