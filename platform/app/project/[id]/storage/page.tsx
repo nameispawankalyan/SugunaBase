@@ -120,8 +120,10 @@ export default function StoragePage() {
             }
 
             if (fPath === currentPath) {
-                // It's a file in the current directory
-                files.push({ ...f, isFolder: false });
+                // It's a file in the current directory, but skip directory placeholder entries
+                if (f.file_name && f.file_type !== 'Folder') {
+                    files.push({ ...f, isFolder: false });
+                }
             } else if (currentPath === '' || fPath.startsWith(currentPath + '/')) {
                 // It's in a subdirectory
                 let remainingPath = currentPath === '' ? fPath : fPath.substring(currentPath.length + 1);
