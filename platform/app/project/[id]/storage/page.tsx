@@ -278,6 +278,14 @@ export default function StoragePage() {
                                                         className="w-full bg-transparent border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
                                                         placeholder="Folder name"
                                                         autoFocus
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' && newFolderName.trim()) {
+                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}/.keep` : `${newFolderName.trim()}/.keep`;
+                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '.keep', file_size: 0 }]);
+                                                                setIsCreatingFolder(false);
+                                                                setNewFolderName('');
+                                                            }
+                                                        }}
                                                     />
                                                     <div className="flex items-center justify-end gap-6 mt-4">
                                                         <button
@@ -291,7 +299,8 @@ export default function StoragePage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
-                                                                alert(`Folder '${newFolderName}' simulation created!`);
+                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}/.keep` : `${newFolderName.trim()}/.keep`;
+                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '.keep', file_size: 0 }]);
                                                                 setIsCreatingFolder(false);
                                                                 setNewFolderName('');
                                                             }}
