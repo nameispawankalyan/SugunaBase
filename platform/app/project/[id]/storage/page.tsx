@@ -250,11 +250,22 @@ export default function StoragePage() {
                                     </p>
                                 </div>
 
-                                <div>
-                                    <span className="text-xs text-gray-500 block mb-1">Download URL</span>
+                                <div className="mt-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs text-gray-500 block">Access token</span>
+                                        <span className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-medium">Revoke</span>
+                                    </div>
+                                    <p className="text-sm text-gray-800 font-mono break-all mb-4">
+                                        {`df1d61d9-5e32-422a-a6dd-a2c2ab4${selectedFile.id?.toString().padStart(4, '0') || '0000'}`}
+                                    </p>
+                                    <span className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-medium">Create new access token</span>
+                                </div>
+
+                                <div className="mt-4 pt-4 border-t">
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">Other Metadata</label>
                                     <a href={selectedFile.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium">
                                         <Download className="h-3 w-3" />
-                                        Click to view/download
+                                        Direct file download link
                                     </a>
                                 </div>
                             </div>
