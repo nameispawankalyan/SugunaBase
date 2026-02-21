@@ -439,7 +439,8 @@ app.delete('/v1/firestore/*', authenticateAppToken, async (req, res) => {
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         let folderPath = req.body.folder_path || '';
-        const projectDir = path.join(uploadDir, String(req.app_user ? req.app_user.project_id : 'shared'), folderPath);
+        const projId = req.params.projectId || (req.app_user ? req.app_user.project_id : 'shared');
+        const projectDir = path.join(uploadDir, String(projId), folderPath);
         if (!fs.existsSync(projectDir)) {
             fs.mkdirSync(projectDir, { recursive: true });
         }
@@ -473,6 +474,28 @@ app.post('/v1/storage/upload', authenticateAppToken, upload.single('file'), asyn
             `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
             [project_id, folder_path, file_name, fileUrl, file_type, file_size]
+        );
+
+        res.json({ message: "File Uploaded Successfully", data: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+        const { projectId } = req.params;
+        const folder_path = req.body.folder_path || '';
+        const file_name = req.file.filename;
+        const file_type = req.file.mimetype;
+        const file_size = req.file.size;
+
+        const fileUrl = `${req.protocol}://${req.get('host')}/storage/${projectId}/${folder_path ? folder_path + '/' : ''}${file_name}`;
+
+        const result = await pool.query(
+            `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [projectId, folder_path, file_name, fileUrl, file_type, file_size]
         );
 
         res.json({ message: "File Uploaded Successfully", data: result.rows[0] });
