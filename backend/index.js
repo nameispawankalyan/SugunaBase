@@ -45,6 +45,19 @@ if (!fs.existsSync(uploadDir)) {
 }
 app.use('/storage', express.static(uploadDir));
 
+// ====================================================
+// CLOUD FUNCTIONS PROXY (Bypass Nginx Cache Issues)
+// ====================================================
+const { createProxyMiddleware } = require('http-proxy-middleware');
+app.use('/functions', createProxyMiddleware({
+    target: 'http://localhost:3005',
+    changeOrigin: true,
+    pathRewrite: {
+        '^/functions': '', // Strip /functions so 3005 receives /login
+    }
+}));
+// ====================================================
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
 });
