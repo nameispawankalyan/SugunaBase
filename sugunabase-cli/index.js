@@ -3,7 +3,7 @@ const { program } = require('commander');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const open = require('open');
+const os = require('os');
 const http = require('http');
 const archiver = require('archiver');
 const FormData = require('form-data');
@@ -85,7 +85,9 @@ program
         server.listen(3006, async () => {
             // Open the login page on your backend server
             const loginUrl = `${SERVER_URL}/login?redirect=http://localhost:3006/callback`;
-            await open(loginUrl);
+            const openMod = await import('open');
+            const openBrowser = openMod.default || openMod;
+            await openBrowser(loginUrl);
             console.log('Waiting for authentication to complete...');
         });
     });
