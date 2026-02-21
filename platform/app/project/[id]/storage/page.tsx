@@ -171,8 +171,8 @@ export default function StoragePage() {
         setIsUploading(true);
         try {
             const formData = new FormData();
-            formData.append('file', file);
             if (currentPath) formData.append('folder_path', currentPath);
+            formData.append('file', file);
 
             const token = localStorage.getItem('token');
             const res = await fetch(`https://api.suguna.co/v1/console/projects/${params.id}/storage/upload`, {
