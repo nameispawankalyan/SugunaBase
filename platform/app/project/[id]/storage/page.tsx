@@ -13,6 +13,7 @@ export default function StoragePage() {
     const [selectedFile, setSelectedFile] = useState<any | null>(null);
     const [copiedName, setCopiedName] = useState<boolean>(false);
     const [copiedPath, setCopiedPath] = useState<boolean>(false);
+    const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
 
     useEffect(() => {
         fetchFiles();
@@ -50,14 +51,17 @@ export default function StoragePage() {
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
     };
 
-    const copyToClipboard = (text: string, type: 'name' | 'path') => {
+    const copyToClipboard = (text: string, type: 'name' | 'path' | 'url') => {
         navigator.clipboard.writeText(text);
         if (type === 'name') {
             setCopiedName(true);
             setTimeout(() => setCopiedName(false), 2000);
-        } else {
+        } else if (type === 'path') {
             setCopiedPath(true);
             setTimeout(() => setCopiedPath(false), 2000);
+        } else {
+            setCopiedUrl(true);
+            setTimeout(() => setCopiedUrl(false), 2000);
         }
     };
 
@@ -119,6 +123,9 @@ export default function StoragePage() {
     };
 
     const breadcrumbParts = currentPath === '' ? [] : currentPath.split('/');
+
+    const pseudoToken = selectedFile ? `df1d61d9-5e32-422a-a6dd-a2c2ab4${(selectedFile.id || 0).toString().padStart(4, '0')}` : '';
+    const directUrl = selectedFile ? `${selectedFile.file_url}?alt=media&token=${pseudoToken}` : '';
 
     return (
         <div className="flex h-[calc(100vh-theme(spacing.16))] -m-8 mt-0 bg-gray-50/50">
@@ -219,11 +226,11 @@ export default function StoragePage() {
                     <div className="p-6 overflow-y-auto flex-1 space-y-6">
                         {selectedFile.file_type?.startsWith('image/') ? (
                             <div className="w-full h-48 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden border p-2">
-                                <img src={selectedFile.file_url} alt={selectedFile.file_name} className="max-w-full max-h-full object-contain" />
+                                <img src={directUrl} alt={selectedFile.file_name} className="max-w-full max-h-full object-contain" />
                             </div>
                         ) : selectedFile.file_type?.startsWith('video/') ? (
                             <div className="w-full h-48 rounded-xl bg-black flex items-center justify-center overflow-hidden border">
-                                <video src={selectedFile.file_url} controls className="max-w-full max-h-full" />
+                                <video src={directUrl} controls className="max-w-full max-h-full" />
                             </div>
                         ) : (
                             <div className="w-full h-48 rounded-xl bg-gray-100 flex items-center justify-center border">
@@ -235,7 +242,7 @@ export default function StoragePage() {
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Name</label>
                                 <div className="flex items-center gap-2 group">
-                                    <a href={selectedFile.file_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline break-all" title="Click to view file in new tab">
+                                    <a href={directUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline break-all" title="Click to view file in new tab">
                                         {selectedFile.file_name}
                                     </a>
                                     <button
@@ -287,14 +294,35 @@ export default function StoragePage() {
                                         <span className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-medium">Revoke</span>
                                     </div>
                                     <p className="text-sm text-gray-800 font-mono break-all mb-4">
-                                        {`df1d61d9-5e32-422a-a6dd-a2c2ab4${selectedFile.id?.toString().padStart(4, '0') || '0000'}`}
+                                        {pseudoToken}
                                     </p>
                                     <span className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-medium">Create new access token</span>
                                 </div>
 
+                                <div className="mt-4">
+                                    <div className="flex justify-between items-start mb-1 group">
+                                        <span className="text-xs text-gray-500 block">Download URL</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 group">
+                                        <span
+                                            onClick={() => copyToClipboard(directUrl, 'url')}
+                                            className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer break-all"
+                                            title="Click to copy Download URL">
+                                            {directUrl}
+                                        </span>
+                                        <button
+                                            onClick={() => copyToClipboard(directUrl, 'url')}
+                                            className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-all flex-shrink-0"
+                                            title="Copy URL"
+                                        >
+                                            {copiedUrl ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="mt-4 pt-4 border-t">
                                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">Other Metadata</label>
-                                    <a href={selectedFile.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium group">
+                                    <a href={directUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium group">
                                         <Download className="h-3 w-3" />
                                         <span>Direct file view/download link</span>
                                     </a>
