@@ -115,7 +115,27 @@ app.post('/run/:projectId/:name', authenticateToken, (req, res) => {
     dockerProcess.stdout.on('data', (data) => { output += data.toString(); });
     dockerProcess.stderr.on('data', (data) => { errOutput += data.toString(); });
 
-    dockerProcess.on('close', (code) => {
+    const startTime = Date.now();
+
+    dockerProcess.on('close', async (code) => {
+        const duration = Date.now() - startTime;
+        const finalStatus = code === 0 ? 'success' : 'error';
+        const combinedLogs = output + errOutput;
+
+        // NEW: Save logs to main backend
+        try {
+            const axios = require('axios');
+            await axios.post('http://localhost:5000/v1/internal/functions/logs', {
+                projectId,
+                name: funcName,
+                status: finalStatus,
+                logs: combinedLogs,
+                duration: duration
+            });
+        } catch (err) {
+            console.error("[RUN] Failed to save logs to backend:", err.message);
+        }
+
         if (code !== 0) {
             console.error(`[RUN] Execution failed for ${funcName}. Exit:`, code);
             return res.status(500).send({ error: "Execution Failed", logs: errOutput });

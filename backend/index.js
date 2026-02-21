@@ -145,6 +145,8 @@ const initDB = async () => {
                 project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
                 name VARCHAR(255) NOT NULL,
                 runtime VARCHAR(50) DEFAULT 'nodejs',
+                trigger_type VARCHAR(50) DEFAULT 'http', -- http, schedule, firestore
+                trigger_value TEXT, -- URL, cron string, or document path
                 status VARCHAR(50) DEFAULT 'active',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -152,17 +154,23 @@ const initDB = async () => {
             );
         `);
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS scheduled_tasks (
+            CREATE TABLE IF NOT EXISTS function_logs (
                 id SERIAL PRIMARY KEY,
                 project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-                function_id INTEGER REFERENCES functions_deployments(id) ON DELETE CASCADE,
-                cron_expression VARCHAR(100) NOT NULL,
-                next_run TIMESTAMP,
-                is_active BOOLEAN DEFAULT TRUE,
+                function_name VARCHAR(255) NOT NULL,
+                status VARCHAR(50), 
+                logs TEXT,
+                execution_time_ms INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions & Schedules)");
+        // Migration to add columns if they don't exist
+        try {
+            await pool.query('ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS trigger_type VARCHAR(50) DEFAULT \'http\';');
+            await pool.query('ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS trigger_value TEXT;');
+        } catch (e) { }
+
+        console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions & Logs)");
     } catch (err) {
         console.error("❌ DB Init Error:", err);
     }
@@ -827,48 +835,69 @@ io.on('connection', (socket) => {
 });
 
 // --- FUNCTIONS MANAGEMENT ROUTES ---
+
+// Fetch Functions (Firebase Style Table Data)
 app.get('/v1/console/projects/:projectId/functions', authenticateToken, async (req, res) => {
     const projectId = req.params.projectId;
     try {
         const result = await pool.query(
-            'SELECT * FROM functions_deployments WHERE project_id = $1 ORDER BY created_at DESC',
+            `SELECT f.*, 
+            (SELECT COUNT(*) FROM function_logs l WHERE l.project_id = f.project_id AND l.function_name = f.name) as request_count 
+            FROM functions_deployments f 
+            WHERE f.project_id = $1 ORDER BY f.created_at DESC`,
             [projectId]
         );
         res.json({ functions: result.rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Fetch Logs for a specific function
+app.get('/v1/console/projects/:projectId/functions/:name/logs', authenticateToken, async (req, res) => {
+    const { projectId, name } = req.params;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM function_logs WHERE project_id = $1 AND function_name = $2 ORDER BY created_at DESC LIMIT 50',
+            [projectId, name]
+        );
+        res.json({ logs: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/v1/console/projects/:projectId/functions/:name', authenticateToken, async (req, res) => {
     const { projectId, name } = req.params;
     try {
-        // Delete from deployments table
-        await pool.query(
-            'DELETE FROM functions_deployments WHERE project_id = $1 AND name = $2',
-            [projectId, name]
-        );
+        await pool.query('DELETE FROM functions_deployments WHERE project_id = $1 AND name = $2', [projectId, name]);
+        await pool.query('DELETE FROM function_logs WHERE project_id = $1 AND function_name = $2', [projectId, name]);
 
-        // Notify Cloud Hub to delete files/images
         const axios = require('axios');
-        try {
-            await axios.delete(`http://localhost:3000/functions/internal/delete/${projectId}/${name}`);
-        } catch (err) {
-            console.error("Failed to notify cloud hub for deletion:", err.message);
-        }
+        try { await axios.delete(`http://localhost:3005/internal/delete/${projectId}/${name}`); } catch (err) { }
 
         res.json({ success: true, message: "Function deleted successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Internal Route (Called by Cloud Functions Hub)
+// Internal Route: Register Function
 app.post('/v1/internal/functions/register', async (req, res) => {
-    const { projectId, name, runtime } = req.body;
+    const { projectId, name, runtime, triggerType, triggerValue } = req.body;
     try {
         await pool.query(`
-            INSERT INTO functions_deployments (project_id, name, runtime, updated_at)
-            VALUES ($1, $2, $3, NOW())
+            INSERT INTO functions_deployments (project_id, name, runtime, trigger_type, trigger_value, updated_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
             ON CONFLICT (project_id, name) DO UPDATE 
-            SET updated_at = NOW(), status = 'active'
-        `, [projectId, name, runtime || 'nodejs']);
+            SET trigger_type = EXCLUDED.trigger_type, trigger_value = EXCLUDED.trigger_value, updated_at = NOW(), status = 'active'
+        `, [projectId, name, runtime || 'nodejs', triggerType || 'http', triggerValue]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Internal Route: Save Execution Logs
+app.post('/v1/internal/functions/logs', async (req, res) => {
+    const { projectId, name, status, logs, duration } = req.body;
+    try {
+        await pool.query(`
+            INSERT INTO function_logs (project_id, function_name, status, logs, execution_time_ms)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [projectId, name, status, logs, duration]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
