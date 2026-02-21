@@ -450,7 +450,12 @@ const storage = multer.diskStorage({
         cb(null, uniqueSuffix + path.extname(file.originalname));
     }
 });
-const upload = multer({ storage: storage });
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 100 * 1024 * 1024 // 100MB limit
+    }
+});
 
 app.post('/v1/storage/upload', authenticateAppToken, upload.single('file'), async (req, res) => {
     try {
