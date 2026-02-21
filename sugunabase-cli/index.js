@@ -22,6 +22,7 @@ program
     .command('login')
     .description('Log in to SugunaBase and get security token')
     .action(async () => {
+        if (fs.existsSync(CONFIG_PATH)) { try { const existingConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); if (existingConfig.token && existingConfig.projectId) { console.log(' You are already logged in to SugunaBase (Project ID: ' + existingConfig.projectId + ').'); const reloginRes = await prompts({ type: 'confirm', name: 'relogin', message: 'Do you want to login to a different account or project?', initial: false }); if (!reloginRes.relogin) { return process.exit(0); } } } catch(e) {} }
         console.log('--- SugunaBase Developer Login ---');
         const authResponse = await prompts([
             { type: 'text', name: 'email', message: 'Email Address:' },
