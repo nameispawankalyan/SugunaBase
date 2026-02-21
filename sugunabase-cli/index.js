@@ -22,73 +22,59 @@ program
     .command('login')
     .description('Log in to SugunaBase and get security token')
     .action(async () => {
-        console.log('Opening browser for authentication...');
+        console.log('--- SugunaBase Developer Login ---');
+        const authResponse = await prompts([
+            { type: 'text', name: 'email', message: 'Email Address:' },
+            { type: 'password', name: 'password', message: 'Password:' }
+        ]);
 
-        // Start a temporary local server to receive the token
-        const server = http.createServer(async (req, res) => {
-            const url = new URL(req.url, `http://${req.headers.host}`);
-            if (url.pathname === '/callback' && url.searchParams.has('token')) {
-                const token = url.searchParams.get('token');
+        if (!authResponse.email || !authResponse.password) {
+            console.log('❌ Login cancelled.');
+            process.exit(1);
+        }
 
-                try {
-                    const response = await axios.get(SERVER_URL + '/projects', {
-                        headers: { 'Authorization': 'Bearer ' + token }
-                    });
+        try {
+            console.log('Authenticating...');
+            // Call the main backend for REAL authentication
+            const loginReq = await axios.post('https://api.suguna.co/v1/auth/login', {
+                email: authResponse.email,
+                password: authResponse.password
+            });
+            const token = loginReq.data.token;
 
-                    const projects = response.data;
-                    const activeProjects = projects.filter(p => p.isActive);
+            console.log('Fetching your projects...');
+            const projReq = await axios.get('https://api.suguna.co/v1/projects', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
 
-                    if (activeProjects.length === 0) {
-                        console.log('\n❌ Not Found. You do not have any active projects in SugunaBase.');
-                        res.writeHead(200, { 'Content-Type': 'text/html' });
-                        res.end("<h1>Login Failed</h1><p>Not Found. You do not have any active projects.</p><p>You can close this window.</p>");
-                        server.close();
-                        process.exit(1);
-                    }
-
-                    // Show prompt on CLI
-                    const choices = activeProjects.map(p => ({ title: p.name, value: p.id }));
-
-                    const promptResult = await prompts({
-                        type: 'select',
-                        name: 'projectId',
-                        message: 'Select a project to build functions for:',
-                        choices: choices
-                    });
-
-                    if (!promptResult.projectId) {
-                        console.log('\n❌ Project selection cancelled.');
-                        res.writeHead(200, { 'Content-Type': 'text/html' });
-                        res.end("<h1>Login Cancelled</h1><p>You can close this window.</p>");
-                        server.close();
-                        process.exit(1);
-                    }
-
-                    // Save token and projectId
-                    fs.writeFileSync(CONFIG_PATH, JSON.stringify({ token, projectId: promptResult.projectId }));
-                    console.log(`\n✅ Successfully logged in and selected project: ${promptResult.projectId}`);
-
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end("<h1>Successfully Logged In!</h1><p>You can close this window and return to your terminal.</p>");
-                } catch (err) {
-                    console.log('\n❌ Failed to fetch projects:', err.message);
-                    res.writeHead(500, { 'Content-Type': 'text/html' });
-                    res.end("<h1>Error</h1><p>Failed to load projects.</p><p>You can close this window.</p>");
-                }
-
-                server.close();
-                process.exit(0);
+            const projects = projReq.data.projects;
+            if (!projects || projects.length === 0) {
+                console.log('❌ You don\'t have any projects in SugunaBase yet.');
+                process.exit(1);
             }
-        });
 
-        server.listen(3006, async () => {
-            // Open the login page on your backend server
-            const loginUrl = `${SERVER_URL}/login?redirect=http://localhost:3006/callback`;
-            const openMod = await import('open');
-            const openBrowser = openMod.default || openMod;
-            await openBrowser(loginUrl);
-            console.log('Waiting for authentication to complete...');
-        });
+            const choices = projects.map(p => ({ title: p.name, value: p.id }));
+
+            const selectRes = await prompts({
+                type: 'select',
+                name: 'projectId',
+                message: 'Select a project to build functions for:',
+                choices: choices
+            });
+
+            if (!selectRes.projectId) {
+                console.log('❌ Project selection cancelled.');
+                process.exit(1);
+            }
+
+            // Save Real JWT token and projectId
+            fs.writeFileSync(CONFIG_PATH, JSON.stringify({ token, projectId: selectRes.projectId }));
+            console.log(`\n✅ Successfully logged in and linked to Project ID: ${selectRes.projectId}`);
+
+        } catch (e) {
+            console.error('\n❌ Authentication failed:', e.response?.data?.error || e.message);
+            process.exit(1);
+        }
     });
 
 // ============== 2. INIT COMMAND ==============

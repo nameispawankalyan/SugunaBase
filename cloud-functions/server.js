@@ -20,52 +20,30 @@ if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const upload = multer({ dest: 'uploads/' });
 
-// ==========================================
-// 1. LOGIN API (Returns a secure token)
-// ==========================================
-app.get('/login', (req, res) => {
-    const redirectUrl = req.query.redirect;
-    // Generate a dummy secure token representing a user login
-    const token = 'suguna-sec-' + Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2);
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'suguna_secret_key';
 
-    if (redirectUrl) {
-        res.redirect(`${redirectUrl}?token=${token}`);
-    } else {
-        res.send(`<h1>Logged In Successfully!</h1><p>Your Token: ${token}</p>`);
-    }
-});
-
-// ==========================================
-// 1.5 PROJECTS API (Returns User Projects)
-// ==========================================
-app.get('/projects', (req, res) => {
+// Middleware to verify REAL tokens from SugunaBase backend
+const authenticateToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer suguna-sec-')) {
-        return res.status(401).send({ error: 'Unauthorized access. Invalid or missing token.' });
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).send({ error: 'Unauthorized access. Token missing.' });
     }
 
-    // Dummy data representing projects from a database
-    const userProjects = [
-        { id: "proj_15", name: "SugunaAuth", isActive: true },
-        { id: "proj_16", name: "SugunaChat", isActive: false },
-        { id: "proj_17", name: "SugunaEcom", isActive: true }
-    ];
-
-    res.json(userProjects);
-});
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).send({ error: 'Invalid or expired token.' });
+        req.user = user;
+        next();
+    });
+};
 
 // ==========================================
 // 2. DEPLOY API (Receives ZIP via CLI)
 // ==========================================
-app.post('/deploy-zip/:projectId/:name', upload.single('project_code'), async (req, res) => {
+app.post('/deploy-zip/:projectId/:name', authenticateToken, upload.single('project_code'), async (req, res) => {
     const projectId = req.params.projectId;
     const funcName = req.params.name;
-    const authHeader = req.headers.authorization;
-
-    // Check if the CLI sent a valid token (Simulation)
-    if (!authHeader || !authHeader.startsWith('Bearer suguna-sec-')) {
-        return res.status(401).send({ error: 'Unauthorized access. Invalid or missing token.' });
-    }
 
     if (!req.file) {
         return res.status(400).send({ error: 'No zip file provided' });
@@ -111,7 +89,7 @@ app.post('/deploy-zip/:projectId/:name', upload.single('project_code'), async (r
 // ==========================================
 // 3. RUN API (Executes the Function)
 // ==========================================
-app.post('/run/:projectId/:name', (req, res) => {
+app.post('/run/:projectId/:name', authenticateToken, (req, res) => {
     const projectId = req.params.projectId;
     const funcName = req.params.name;
     const eventData = JSON.stringify(req.body);
