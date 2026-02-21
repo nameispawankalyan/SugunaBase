@@ -23,7 +23,7 @@ const upload = multer({ dest: 'uploads/' });
 // ==========================================
 // 1. LOGIN API (Returns a secure token)
 // ==========================================
-app.get('/login', (req, res) => {
+app.get('/functions/login', (req, res) => {
     const redirectUrl = req.query.redirect;
     // Generate a dummy secure token representing a user login
     const token = 'suguna-sec-' + Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2);
@@ -38,7 +38,7 @@ app.get('/login', (req, res) => {
 // ==========================================
 // 1.5 PROJECTS API (Returns User Projects)
 // ==========================================
-app.get('/projects', (req, res) => {
+app.get('/functions/projects', (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer suguna-sec-')) {
         return res.status(401).send({ error: 'Unauthorized access. Invalid or missing token.' });
@@ -57,7 +57,7 @@ app.get('/projects', (req, res) => {
 // ==========================================
 // 2. DEPLOY API (Receives ZIP via CLI)
 // ==========================================
-app.post('/deploy-zip/:projectId/:name', upload.single('project_code'), async (req, res) => {
+app.post('/functions/deploy-zip/:projectId/:name', upload.single('project_code'), async (req, res) => {
     const projectId = req.params.projectId;
     const funcName = req.params.name;
     const authHeader = req.headers.authorization;
@@ -111,7 +111,7 @@ app.post('/deploy-zip/:projectId/:name', upload.single('project_code'), async (r
 // ==========================================
 // 3. RUN API (Executes the Function)
 // ==========================================
-app.post('/run/:projectId/:name', (req, res) => {
+app.post('/functions/run/:projectId/:name', (req, res) => {
     const projectId = req.params.projectId;
     const funcName = req.params.name;
     const eventData = JSON.stringify(req.body);
