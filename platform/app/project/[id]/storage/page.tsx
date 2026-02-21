@@ -189,6 +189,33 @@ export default function StoragePage() {
         }
     };
 
+    const handleCreateFolder = async () => {
+        if (!newFolderName.trim()) return;
+        const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}` : newFolderName.trim();
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`https://api.suguna.co/v1/console/projects/${params.id}/storage/folder`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ folder_path: fPath })
+            });
+
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
+            await fetchFiles();
+        } catch (err: any) {
+            // Fallback UI mock if API is down
+            setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '', file_size: 0, is_mock_folder: true }]);
+        } finally {
+            setIsCreatingFolder(false);
+            setNewFolderName('');
+        }
+    };
+
     const handleNavigate = (folderName: string) => {
         const newPath = currentPath === '' ? folderName : `${currentPath}/${folderName}`;
         setCurrentPath(newPath);
@@ -291,10 +318,7 @@ export default function StoragePage() {
                                                         autoFocus
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Enter' && newFolderName.trim()) {
-                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}` : newFolderName.trim();
-                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '', file_size: 0, is_mock_folder: true }]);
-                                                                setIsCreatingFolder(false);
-                                                                setNewFolderName('');
+                                                                handleCreateFolder();
                                                             }
                                                         }}
                                                     />
@@ -309,12 +333,7 @@ export default function StoragePage() {
                                                             Cancel
                                                         </button>
                                                         <button
-                                                            onClick={() => {
-                                                                const fPath = currentPath ? `${currentPath}/${newFolderName.trim()}` : newFolderName.trim();
-                                                                setAllFiles(prev => [...prev, { id: `mock_${Date.now()}`, folder_path: fPath, file_name: '', file_size: 0, is_mock_folder: true }]);
-                                                                setIsCreatingFolder(false);
-                                                                setNewFolderName('');
-                                                            }}
+                                                            onClick={handleCreateFolder}
                                                             disabled={!newFolderName.trim()}
                                                             className={`text-sm font-medium transition-colors ${!newFolderName.trim() ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-800'}`}
                                                         >

@@ -479,6 +479,20 @@ app.post('/v1/storage/upload', authenticateAppToken, upload.single('file'), asyn
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    const { folder_path } = req.body;
+    try {
+        // Just insert a dummy record specifying this folder exists so the UI catches it
+        const result = await pool.query(
+            `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
+             VALUES ($1, $2, '', '', 'Folder', 0) RETURNING *`,
+            [projectId, folder_path]
+        );
+        res.json({ message: "Folder Created Successfully", data: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/v1/console/projects/:projectId/storage', authenticateToken, async (req, res) => {
     const { projectId } = req.params;
     try {
