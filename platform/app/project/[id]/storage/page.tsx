@@ -263,7 +263,7 @@ export default function StoragePage() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ ids: selectedItems.filter(id => !id.startsWith('folder_') && !id.startsWith('mock_')) })
+                body: JSON.stringify({ ids: selectedItems.filter(id => !String(id).startsWith('folder_') && !String(id).startsWith('mock_')) })
             });
 
             if (!res.ok) throw new Error(`Server returned ${res.status} `);
