@@ -520,17 +520,32 @@ app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, as
 
 app.delete('/v1/console/projects/:projectId/storage', authenticateToken, async (req, res) => {
     const { projectId } = req.params;
-    const { ids } = req.body;
-    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+    const { ids, folderPaths } = req.body;
+
+    // allow either ids or folderPaths
+    if ((!ids || ids.length === 0) && (!folderPaths || folderPaths.length === 0)) {
+        return res.status(400).json({ error: "No storage items provided to delete" });
+    }
 
     try {
-        // We delete by primary key or an equivalent matched column. Assuming `id` is the primary key for storage_files.
-        // Also ensure project_id matches to prevent unauthorized deletions.
-        const query = `DELETE FROM storage_files WHERE project_id = $1 AND id = ANY($2::int[]) RETURNING *`;
-        const result = await pool.query(query, [projectId, ids]);
+        let deletedCount = 0;
 
-        // Optionally: we can also remove the file physically from the storage_uploads folder here, if we had the paths.
-        res.json({ message: "Deleted successfully", count: result.rowCount });
+        if (ids && ids.length > 0) {
+            const query = `DELETE FROM storage_files WHERE project_id = $1 AND id = ANY($2::int[]) RETURNING *`;
+            const result = await pool.query(query, [projectId, ids]);
+            deletedCount += result.rowCount;
+        }
+
+        if (folderPaths && folderPaths.length > 0) {
+            for (let folderPath of folderPaths) {
+                // Delete the folder itself, or any file inside it
+                const query = `DELETE FROM storage_files WHERE project_id = $1 AND (folder_path = $2 OR folder_path LIKE $3)`;
+                const result = await pool.query(query, [projectId, folderPath, `${folderPath}/%`]);
+                deletedCount += result.rowCount;
+            }
+        }
+
+        res.json({ message: "Deleted successfully", count: deletedCount });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

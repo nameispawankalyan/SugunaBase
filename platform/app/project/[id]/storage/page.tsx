@@ -262,13 +262,19 @@ export default function StoragePage() {
         setIsDeleting(true);
         try {
             const token = localStorage.getItem('token');
+            const fileIds = selectedItems.filter(id => !String(id).startsWith('folder_') && !String(id).startsWith('mock_'));
+            const folderNames = selectedItems.filter(id => String(id).startsWith('folder_')).map(id => String(id).replace('folder_', ''));
+
+            let currentPrefix = currentPath ? `${currentPath}/` : '';
+            const folderPaths = folderNames.map(name => `${currentPrefix}${name}`);
+
             const res = await fetch(`https://api.suguna.co/v1/console/projects/${params.id}/storage`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ ids: selectedItems.filter(id => !String(id).startsWith('folder_') && !String(id).startsWith('mock_')) })
+                body: JSON.stringify({ ids: fileIds, folderPaths })
             });
 
             if (!res.ok) throw new Error(`Server returned ${res.status} `);
