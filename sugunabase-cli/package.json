@@ -1,0 +1,22 @@
+{
+    "name": "sugunabase-tools",
+    "version": "1.0.0",
+    "description": "SugunaBase CLI for Cloud Functions",
+    "main": "index.js",
+    "bin": {
+        "sugunabase": "./index.js"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "archiver": "^6.0.1",
+        "axios": "^1.6.2",
+        "commander": "^11.1.0",
+        "form-data": "^4.0.0",
+        "open": "^9.1.0",
+        "prompts": "^2.4.2"
+    },
+    "author": "SugunaBase",
+    "license": "ISC"
+}

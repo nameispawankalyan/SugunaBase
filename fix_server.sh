@@ -30,6 +30,13 @@ npm run build
 # Force Port 3000
 PORT=3000 pm2 start "npm run start" --name "suguna-console"
 
+# 3.5 Start Cloud Functions Hub (Port 3005)
+echo "🚀 Starting Cloud Functions Hub on Port 3005..."
+cd ~/SugunaBase/cloud-functions
+npm install
+# Ensure Docker daemon is running on VPS
+pm2 start server.js --name "suguna-functions-hub"
+
 # 4. Save PM2 list so they restart on reboot
 pm2 save
 
@@ -56,6 +63,15 @@ server {
 server {
     listen 80;
     server_name suguna.co www.suguna.co console.suguna.co;
+
+    location /functions/ {
+        proxy_pass http://localhost:3005/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
 
     location / {
         proxy_pass http://localhost:3000;
