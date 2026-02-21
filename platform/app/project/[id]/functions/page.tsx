@@ -4,7 +4,7 @@ import { use, useEffect, useState } from 'react';
 import {
     FileCode, Loader2, Play, ExternalLink, Terminal, Plus, Trash2,
     X, AlertTriangle, Clock, Globe, Database, MoreVertical,
-    ChevronRight, Hash, Activity, RefreshCw, Layers, Copy, Check, Timer, Zap, Send
+    ChevronRight, Hash, Activity, RefreshCw, Layers, Copy, Check, Timer, Zap, Send, Calendar
 } from 'lucide-react';
 
 export default function FunctionsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +15,7 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
     const [deleteModal, setDeleteModal] = useState<{ open: boolean, name: string }>({ open: false, name: '' });
     const [logModal, setLogModal] = useState<{ open: boolean, name: string, data: any[] }>({ open: false, name: '', data: [] });
     const [testModal, setTestModal] = useState<{ open: boolean, name: string, input: string, output: string, loading: boolean }>({ open: false, name: '', input: '{}', output: '', loading: false });
+    const [scheduleModal, setScheduleModal] = useState<{ open: boolean, name: string, cron: string, saving: boolean }>({ open: false, name: '', cron: '0 4 * * *', saving: false });
     const [deleting, setDeleting] = useState(false);
     const [fetchingLogs, setFetchingLogs] = useState(false);
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -74,10 +75,35 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
             });
             const data = await res.json();
             setTestModal(prev => ({ ...prev, output: JSON.stringify(data, null, 2), loading: false }));
-            // Refresh counts
             fetchFunctions();
         } catch (err: any) {
             setTestModal(prev => ({ ...prev, output: "Error: " + err.message, loading: false }));
+        }
+    };
+
+    const handleSaveSchedule = async () => {
+        setScheduleModal(prev => ({ ...prev, saving: true }));
+        const token = localStorage.getItem('token');
+        try {
+            const res = await fetch(`https://api.suguna.co/v1/console/projects/${id}/functions/${scheduleModal.name}/schedule`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ cronString: scheduleModal.cron })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setScheduleModal({ open: false, name: '', cron: '', saving: false });
+                fetchFunctions();
+            } else {
+                alert(data.error || "Failed to update schedule");
+            }
+        } catch (err: any) {
+            alert("Error: " + err.message);
+        } finally {
+            setScheduleModal(prev => ({ ...prev, saving: false }));
         }
     };
 
@@ -141,6 +167,69 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
 
     return (
         <div className="p-0 animate-in fade-in duration-500">
+            {/* Schedule Modal */}
+            {scheduleModal.open && (
+                <div className="fixed inset-0 z-[230] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] p-10 max-w-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                                <Clock className="h-7 w-7 text-orange-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Automation</h3>
+                                <p className="text-xs text-gray-400 font-bold font-mono">Set schedule for: {scheduleModal.name}</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black uppercase tracking-[2px] text-gray-400 flex items-center gap-2">
+                                    <Calendar className="h-3 w-3" /> Cron Expression
+                                </label>
+                                <input
+                                    type="text"
+                                    value={scheduleModal.cron}
+                                    onChange={(e) => setScheduleModal(prev => ({ ...prev, cron: e.target.value }))}
+                                    placeholder="* * * * *"
+                                    className="w-full p-5 bg-gray-50 border border-gray-100 rounded-2xl font-mono text-lg font-bold focus:outline-none focus:ring-4 focus:ring-orange-500/10 transition-all text-gray-800"
+                                />
+                                <div className="flex flex-wrap gap-2 pt-2">
+                                    <button onClick={() => setScheduleModal(prev => ({ ...prev, cron: '*/1 * * * *' }))} className="px-3 py-1.5 bg-gray-50 hover:bg-orange-50 text-[10px] font-black text-gray-400 hover:text-orange-600 rounded-lg transition-colors border border-gray-100">EVERY MINUTE</button>
+                                    <button onClick={() => setScheduleModal(prev => ({ ...prev, cron: '0 * * * *' }))} className="px-3 py-1.5 bg-gray-50 hover:bg-orange-50 text-[10px] font-black text-gray-400 hover:text-orange-600 rounded-lg transition-colors border border-gray-100">HOURLY</button>
+                                    <button onClick={() => setScheduleModal(prev => ({ ...prev, cron: '0 4 * * *' }))} className="px-3 py-1.5 bg-gray-50 hover:bg-orange-50 text-[10px] font-black text-gray-400 hover:text-orange-600 rounded-lg transition-colors border border-gray-100">DAILY AT 4 AM</button>
+                                    <button onClick={() => setScheduleModal(prev => ({ ...prev, cron: '0 0 * * 0' }))} className="px-3 py-1.5 bg-gray-50 hover:bg-orange-50 text-[10px] font-black text-gray-400 hover:text-orange-600 rounded-lg transition-colors border border-gray-100">WEEKLY</button>
+                                </div>
+                            </div>
+
+                            <div className="p-5 bg-gray-900 rounded-2xl border border-gray-800">
+                                <p className="text-gray-400 text-[11px] font-mono leading-relaxed">
+                                    <span className="text-orange-400 font-bold block mb-1">PRO TIP:</span>
+                                    The cron format is <code className="text-white">min hour day month week</code>.
+                                    Use <span className="text-emerald-400">0 4 * * *</span> to run daily at precisely 4:00 AM UTC.
+                                </p>
+                            </div>
+
+                            <div className="flex gap-3 pt-6">
+                                <button
+                                    onClick={handleSaveSchedule}
+                                    disabled={scheduleModal.saving}
+                                    className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black text-sm hover:bg-orange-700 transition-all active:scale-95 shadow-xl shadow-orange-200 flex items-center justify-center gap-2"
+                                >
+                                    {scheduleModal.saving ? <Loader2 className="animate-spin h-5 w-5" /> : <Zap className="h-4 w-4" />}
+                                    ACTIVATE SCHEDULE
+                                </button>
+                                <button
+                                    onClick={() => setScheduleModal({ open: false, name: '', cron: '', saving: false })}
+                                    className="px-6 py-4 bg-gray-100 text-gray-600 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
+                                >
+                                    CANCEL
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Test Run Modal */}
             {testModal.open && (
                 <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
@@ -364,7 +453,7 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <p className="text-xs font-black text-gray-800 uppercase tracking-wider">{fn.trigger_type || 'HTTP'}</p>
-                                                        {fn.trigger_type === 'http' && (
+                                                        {fn.trigger_type === 'http' ? (
                                                             <div className="flex items-center gap-2 mt-1">
                                                                 <p className="text-[11px] text-gray-400 font-mono truncate max-w-[140px] font-bold">
                                                                     {triggerUrl}
@@ -377,6 +466,10 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
                                                                     <span className="text-[9px] font-black uppercase">Copy</span>
                                                                 </button>
                                                             </div>
+                                                        ) : (
+                                                            <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-1">
+                                                                {fn.trigger_value || 'Active'}
+                                                            </p>
                                                         )}
                                                     </div>
                                                 </div>
@@ -430,8 +523,8 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
                                                                 <div className="p-1.5 bg-emerald-50 rounded-lg"><Zap className="h-4 w-4 text-emerald-600" /></div>
                                                                 Test Run
                                                             </button>
-                                                            <button className="w-full px-5 py-3 text-left text-[13px] font-bold text-gray-400 hover:bg-gray-50 flex items-center gap-4 transition-all opacity-50 cursor-not-allowed">
-                                                                <div className="p-1.5 bg-gray-50 rounded-lg"><Clock className="h-4 w-4 text-gray-400" /></div>
+                                                            <button onClick={() => { setScheduleModal({ open: true, name: fn.name, cron: fn.trigger_type === 'schedule' ? fn.trigger_value : '0 4 * * *', saving: false }); setActiveMenu(null); }} className="w-full px-5 py-3 text-left text-[13px] font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-4 transition-all hover:translate-x-1">
+                                                                <div className="p-1.5 bg-orange-50 rounded-lg"><Clock className="h-4 w-4 text-orange-600" /></div>
                                                                 Schedule Task
                                                             </button>
                                                             <div className="h-px bg-gray-50 my-2 mx-3"></div>

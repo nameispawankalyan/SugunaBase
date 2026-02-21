@@ -8,6 +8,8 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cron = require('node-cron');
+const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
@@ -178,10 +180,59 @@ const initDB = async () => {
         } catch (e) { }
 
         console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions & Logs)");
+        initSchedules(); // Start the Cron Engine
     } catch (err) {
         console.error("❌ DB Init Error:", err);
     }
 };
+
+// --- CRON ENGINE (Scheduled Functions) ---
+const activeCronJobs = new Map();
+
+const runScheduledFunction = async (projectId, funcName) => {
+    try {
+        console.log(`[CRON ENGINE] 🚀 Triggering ${funcName} (Project ${projectId})`);
+        await axios.post(`http://localhost:3005/run/${projectId}/${funcName}`, {}, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+    } catch (err) {
+        console.error(`[CRON ENGINE] ❌ Execution failed for ${funcName}:`, err.message);
+    }
+};
+
+const initSchedules = async () => {
+    try {
+        const res = await pool.query("SELECT * FROM functions_deployments WHERE trigger_type = 'schedule' AND trigger_value IS NOT NULL");
+        res.rows.forEach(fn => {
+            const jobId = `${fn.project_id}-${fn.name}`;
+            if (cron.validate(fn.trigger_value)) {
+                const job = cron.schedule(fn.trigger_value, () => runScheduledFunction(fn.project_id, fn.name));
+                activeCronJobs.set(jobId, job);
+                console.log(`[CRON] Scheduled ${fn.name} (${fn.trigger_value})`);
+            }
+        });
+    } catch (e) { console.error("[CRON] Init Error:", e.message); }
+};
+
+const updateFunctionSchedule = async (projectId, funcName, cronString) => {
+    const jobId = `${projectId}-${funcName}`;
+
+    // Stop existing job if any
+    if (activeCronJobs.has(jobId)) {
+        activeCronJobs.get(jobId).stop();
+        activeCronJobs.delete(jobId);
+    }
+
+    // If new cron provided, start it
+    if (cronString && cron.validate(cronString)) {
+        const job = cron.schedule(cronString, () => runScheduledFunction(projectId, funcName));
+        activeCronJobs.set(jobId, job);
+        console.log(`[CRON] Updated schedule for ${funcName}: ${cronString}`);
+        return true;
+    }
+    return false;
+};
+
 initDB();
 
 // --- AUTH ROUTES FOR CONSOLE (Developers) ---
@@ -911,6 +962,26 @@ app.post('/v1/internal/functions/logs', async (req, res) => {
             VALUES ($1, $2, $3, $4, $5)
         `, [projectId, name, status, logs, duration]);
         res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Update Function Schedule (Cron)
+app.post('/v1/console/projects/:projectId/functions/:name/schedule', authenticateToken, async (req, res) => {
+    const { projectId, name } = req.params;
+    const { cronString } = req.body;
+
+    try {
+        if (!cron.validate(cronString)) {
+            return res.status(400).json({ error: "Invalid Cron Expression" });
+        }
+
+        await pool.query(
+            "UPDATE functions_deployments SET trigger_type = 'schedule', trigger_value = $1, updated_at = NOW() WHERE project_id = $2 AND name = $3",
+            [cronString, projectId, name]
+        );
+
+        await updateFunctionSchedule(projectId, name, cronString);
+        res.json({ success: true, message: "Schedule updated successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
