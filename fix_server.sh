@@ -40,6 +40,7 @@ sudo tee /etc/nginx/sites-available/suguna > /dev/null <<EOT
 server {
     listen 80;
     server_name api.suguna.co;
+    client_max_body_size 100M;
 
     location / {
         proxy_pass http://localhost:5000;
