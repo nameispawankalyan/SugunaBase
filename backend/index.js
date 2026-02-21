@@ -151,7 +151,18 @@ const initDB = async () => {
                 UNIQUE(project_id, name)
             );
         `);
-        console.log("✅ Database Tables Initialized (including SugunaFirestore & Functions)");
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                function_id INTEGER REFERENCES functions_deployments(id) ON DELETE CASCADE,
+                cron_expression VARCHAR(100) NOT NULL,
+                next_run TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions & Schedules)");
     } catch (err) {
         console.error("❌ DB Init Error:", err);
     }
@@ -827,10 +838,30 @@ app.get('/v1/console/projects/:projectId/functions', authenticateToken, async (r
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete('/v1/console/projects/:projectId/functions/:name', authenticateToken, async (req, res) => {
+    const { projectId, name } = req.params;
+    try {
+        // Delete from deployments table
+        await pool.query(
+            'DELETE FROM functions_deployments WHERE project_id = $1 AND name = $2',
+            [projectId, name]
+        );
+
+        // Notify Cloud Hub to delete files/images
+        const axios = require('axios');
+        try {
+            await axios.delete(`http://localhost:3000/functions/internal/delete/${projectId}/${name}`);
+        } catch (err) {
+            console.error("Failed to notify cloud hub for deletion:", err.message);
+        }
+
+        res.json({ success: true, message: "Function deleted successfully" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Internal Route (Called by Cloud Functions Hub)
 app.post('/v1/internal/functions/register', async (req, res) => {
     const { projectId, name, runtime } = req.body;
-    // Note: In production, add a secret key check here
     try {
         await pool.query(`
             INSERT INTO functions_deployments (project_id, name, runtime, updated_at)

@@ -141,6 +141,34 @@ app.post('/run/:projectId/:name', authenticateToken, (req, res) => {
     dockerProcess.stdin.end();
 });
 
+// ==========================================
+// 4. DELETE API (Removes Function)
+// ==========================================
+app.delete('/internal/delete/:projectId/:name', async (req, res) => {
+    const { projectId, name } = req.params;
+    const funcDir = path.join(FUNCS_DIR, projectId, name);
+    const imageName = `sgfn-${projectId}-${name}`;
+
+    try {
+        // 1. Remove Docker Image
+        exec(`docker rmi -f ${imageName}`, (err) => {
+            if (err) console.error(`[DELETE] Failed to remove image ${imageName}:`, err.message);
+            else console.log(`[DELETE] Image ${imageName} removed.`);
+        });
+
+        // 2. Remove Files
+        if (fs.existsSync(funcDir)) {
+            fs.rmSync(funcDir, { recursive: true, force: true });
+            console.log(`[DELETE] Directory ${funcDir} removed.`);
+        }
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error(`[DELETE] Error:`, e);
+        res.status(500).json({ error: "Failed to delete function from hub" });
+    }
+});
+
 const PORT = 3005;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`=== SugunaBase Cloud Functions Hub ===`);
