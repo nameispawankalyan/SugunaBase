@@ -11,7 +11,7 @@ const axios = require('axios');
 const prompts = require('prompts');
 
 const CONFIG_PATH = path.join(os.homedir(), '.sugunabase-config.json');
-const SERVER_URL = 'http://localhost:3005'; // Our backend address
+const SERVER_URL = 'https://api.suguna.co/functions'; // Live backend address
 
 program
     .name('sugunabase')
