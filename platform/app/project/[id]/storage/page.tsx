@@ -13,11 +13,38 @@ export default function StoragePage() {
     const [selectedFile, setSelectedFile] = useState<any | null>(null);
     const [copiedName, setCopiedName] = useState<boolean>(false);
     const [copiedPath, setCopiedPath] = useState<boolean>(false);
-    const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
+    const [mockTokens, setMockTokens] = useState<string[]>([]);
+    const [copiedTokenIdx, setCopiedTokenIdx] = useState<number | null>(null);
 
     useEffect(() => {
         fetchFiles();
     }, [params.id]);
+
+    useEffect(() => {
+        if (selectedFile) {
+            setMockTokens([`df1d61d9-5e32-422a-a6dd-a2c2ab4${(selectedFile.id || 0).toString().padStart(4, '0')}`]);
+        }
+    }, [selectedFile]);
+
+    const handleRevokeToken = (idx: number) => {
+        setMockTokens(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const handleCreateToken = () => {
+        const cryptoObj = window.crypto || (window as any).msCrypto;
+        if (cryptoObj && cryptoObj.randomUUID) {
+            setMockTokens(prev => [...prev, cryptoObj.randomUUID()]);
+        } else {
+            setMockTokens(prev => [...prev, `${Date.now()}-${Math.floor(Math.random() * 1000)}`]);
+        }
+    };
+
+    const copyTokenUrl = (token: string, idx: number) => {
+        const url = `${selectedFile.file_url}?alt=media&token=${token}`;
+        navigator.clipboard.writeText(url);
+        setCopiedTokenIdx(idx);
+        setTimeout(() => setCopiedTokenIdx(null), 2000);
+    };
 
     const fetchFiles = async () => {
         try {
@@ -124,8 +151,8 @@ export default function StoragePage() {
 
     const breadcrumbParts = currentPath === '' ? [] : currentPath.split('/');
 
-    const pseudoToken = selectedFile ? `df1d61d9-5e32-422a-a6dd-a2c2ab4${(selectedFile.id || 0).toString().padStart(4, '0')}` : '';
-    const directUrl = selectedFile ? `${selectedFile.file_url}?alt=media&token=${pseudoToken}` : '';
+    const primaryToken = mockTokens.length > 0 ? mockTokens[0] : '';
+    const directUrl = selectedFile ? (primaryToken ? `${selectedFile.file_url}?alt=media&token=${primaryToken}` : selectedFile.file_url) : '';
 
     return (
         <div className="flex h-[calc(100vh-theme(spacing.16))] -m-8 mt-0 bg-gray-50/50">
@@ -289,35 +316,33 @@ export default function StoragePage() {
                                 </div>
 
                                 <div className="mt-4">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs text-gray-500 block">Access token</span>
-                                        <span className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-medium">Revoke</span>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs text-gray-500">Access token</span>
                                     </div>
-                                    <p className="text-sm text-gray-800 font-mono break-all mb-4">
-                                        {pseudoToken}
-                                    </p>
-                                    <span className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-medium">Create new access token</span>
-                                </div>
-
-                                <div className="mt-4">
-                                    <div className="flex justify-between items-start mb-1 group">
-                                        <span className="text-xs text-gray-500 block">Download URL</span>
+                                    <div className="space-y-2 mb-3">
+                                        {mockTokens.length === 0 && <span className="text-xs text-gray-400 italic">No access tokens available</span>}
+                                        {mockTokens.map((t, idx) => (
+                                            <div key={idx} className="flex items-start justify-between group">
+                                                <div className="flex items-center gap-2 overflow-hidden w-full">
+                                                    <span
+                                                        onClick={() => copyTokenUrl(t, idx)}
+                                                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-mono cursor-pointer underline-offset-2 truncate"
+                                                        title="Click to copy download URL">
+                                                        {t}
+                                                    </span>
+                                                    {copiedTokenIdx === idx && <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />}
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRevokeToken(idx)}
+                                                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ml-4">
+                                                    Revoke
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <div className="flex items-center gap-2 group">
-                                        <span
-                                            onClick={() => copyToClipboard(directUrl, 'url')}
-                                            className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer break-all"
-                                            title="Click to copy Download URL">
-                                            {directUrl}
-                                        </span>
-                                        <button
-                                            onClick={() => copyToClipboard(directUrl, 'url')}
-                                            className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-all flex-shrink-0"
-                                            title="Copy URL"
-                                        >
-                                            {copiedUrl ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                                        </button>
-                                    </div>
+                                    <button onClick={handleCreateToken} className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium block">
+                                        Create new access token
+                                    </button>
                                 </div>
 
                                 <div className="mt-4 pt-4 border-t">
