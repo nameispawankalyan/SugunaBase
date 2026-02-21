@@ -240,6 +240,40 @@ export default function StoragePage() {
 
     const primaryToken = mockTokens.length > 0 ? mockTokens[0] : '';
     const directUrl = selectedFile ? (primaryToken ? `${selectedFile.file_url}?alt=media&token=${primaryToken}` : selectedFile.file_url) : '';
+    const isAnyFolderSelected = items.filter(i => selectedItems.includes(i.id)).some(i => i.isFolder);
+
+    const handleDownloadSelected = () => {
+        if (isAnyFolderSelected) return;
+        const filesToDownload = items.filter(i => selectedItems.includes(i.id) && !i.isFolder);
+        filesToDownload.forEach(f => {
+            const tokenQuery = f.file_url.includes('?') ? '&' : '?';
+            const url = `${f.file_url}${tokenQuery}alt=media&token=${primaryToken}`;
+            window.open(url, '_blank');
+        });
+    };
+
+    const handleDeleteSelected = async () => {
+        if (!confirm(`Are you sure you want to delete ${selectedItems.length} selected item(s)?`)) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`https://api.suguna.co/v1/console/projects/${params.id}/storage`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ ids: selectedItems.filter(id => !id.startsWith('folder_') && !id.startsWith('mock_')) })
+            });
+
+            if (!res.ok) throw new Error(`Server returned ${res.status} `);
+
+            setSelectedItems([]);
+            await fetchFiles();
+        } catch (err: any) {
+            alert('Failed to delete items: ' + err.message);
+        }
+    };
 
     return (
         <div className="flex h-[calc(100vh-theme(spacing.16))] -m-8 mt-0 bg-gray-50/50">
@@ -291,18 +325,46 @@ export default function StoragePage() {
                     <div className="flex-1 overflow-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50 sticky top-0 z-10">
-                                <tr>
-                                    <th scope="col" className="w-12 px-6 py-3 text-left">
-                                        <input type="checkbox"
-                                            checked={items.length > 0 && selectedItems.length === items.length}
-                                            onChange={toggleAll}
-                                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer" />
-                                    </th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Name</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Size</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Type</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Last modified</th>
-                                </tr>
+                                {selectedItems.length > 0 ? (
+                                    <tr className="bg-blue-100 border-b border-blue-200">
+                                        <th scope="col" colSpan={5} className="px-4 py-3 text-left">
+                                            <div className="flex items-center text-blue-800">
+                                                <button onClick={() => setSelectedItems([])} className="hover:bg-blue-200 p-1.5 rounded-full transition-colors mr-3" title="Clear selection">
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                                <span className="text-sm font-medium border-r border-blue-300 pr-4 mr-4 shrink-0">{selectedItems.length} selected</span>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={handleDownloadSelected}
+                                                        disabled={isAnyFolderSelected}
+                                                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${isAnyFolderSelected ? 'bg-blue-100 text-blue-400 cursor-not-allowed opacity-70' : 'bg-white text-blue-700 hover:bg-blue-50 focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 shadow-sm'}`}
+                                                    >
+                                                        Download
+                                                    </button>
+                                                    <button
+                                                        onClick={handleDeleteSelected}
+                                                        className="px-4 py-1.5 rounded-full text-sm font-medium bg-transparent border border-blue-300 text-blue-700 hover:bg-blue-200 transition-colors focus:ring-2 focus:ring-offset-1 focus:ring-blue-500"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </th>
+                                    </tr>
+                                ) : (
+                                    <tr>
+                                        <th scope="col" className="w-12 px-6 py-3 text-left">
+                                            <input type="checkbox"
+                                                checked={items.length > 0 && selectedItems.length === items.length}
+                                                onChange={toggleAll}
+                                                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer" />
+                                        </th>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Name</th>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Size</th>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Type</th>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Last modified</th>
+                                    </tr>
+                                )}
                             </thead>
                             <tbody className="divide-y divide-gray-100 bg-white">
                                 {isCreatingFolder && (

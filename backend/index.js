@@ -518,6 +518,22 @@ app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, as
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete('/v1/console/projects/:projectId/storage', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+
+    try {
+        // We delete by primary key or an equivalent matched column. Assuming `id` is the primary key for storage_files.
+        // Also ensure project_id matches to prevent unauthorized deletions.
+        const query = `DELETE FROM storage_files WHERE project_id = $1 AND id = ANY($2::int[]) RETURNING *`;
+        const result = await pool.query(query, [projectId, ids]);
+
+        // Optionally: we can also remove the file physically from the storage_uploads folder here, if we had the paths.
+        res.json({ message: "Deleted successfully", count: result.rowCount });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/v1/console/projects/:projectId/storage', authenticateToken, async (req, res) => {
     const { projectId } = req.params;
     try {
