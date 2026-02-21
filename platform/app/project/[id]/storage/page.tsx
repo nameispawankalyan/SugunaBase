@@ -230,6 +230,15 @@ export default function StoragePage() {
                     <div className="flex gap-2">
                         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
                         <button
+                            onClick={() => {
+                                const Name = prompt('Enter new folder name:');
+                                if (Name) alert('Folder Creation UI Action Initiated!\n(Note: Simulated for now)');
+                            }}
+                            className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 transition shadow-sm border border-gray-200">
+                            <Folder className="h-4 w-4" />
+                            Create Folder
+                        </button>
+                        <button
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isUploading}
                             className={`flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 transition shadow-sm ${isUploading ? 'opacity-70 cursor-wait' : ''}`}>
