@@ -101,10 +101,15 @@ app.post('/deploy-zip/:projectId/:name', authenticateToken, upload.single('proje
 // ==========================================
 // 3. RUN API (Executes the Function)
 // ==========================================
-app.post('/run/:projectId/:name', authenticateToken, (req, res) => {
+app.all('/run/:projectId/:name', (req, res) => {
     const projectId = req.params.projectId;
     const funcName = req.params.name;
-    const eventData = JSON.stringify(req.body);
+
+    // Combine Body and Query params for full event support (GET or POST)
+    const eventData = JSON.stringify({
+        ...req.query,
+        ...req.body
+    });
 
     const imageName = `sgfn-${projectId}-${funcName}`;
 
