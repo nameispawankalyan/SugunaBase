@@ -154,8 +154,8 @@ app.post('/run/:projectId/:name', (req, res) => {
 });
 
 const PORT = 3005;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`=== SugunaBase Cloud Functions Hub ===`);
-    console.log(`> Server running on http://localhost:${PORT}`);
+    console.log(`> Server running on http://0.0.0.0:${PORT}`);
     console.log(`> Ready to accept CLI connections!`);
 });
