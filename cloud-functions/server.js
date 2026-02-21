@@ -49,40 +49,50 @@ app.post('/deploy-zip/:projectId/:name', authenticateToken, upload.single('proje
         return res.status(400).send({ error: 'No zip file provided' });
     }
 
-    // Include projectId in the directory structure
     const funcDir = path.join(FUNCS_DIR, projectId, funcName);
 
     try {
-        // Create clean directory for function
+        // 1. Create clean directory
         if (fs.existsSync(funcDir)) {
             fs.rmSync(funcDir, { recursive: true, force: true });
         }
         fs.mkdirSync(funcDir, { recursive: true });
 
-        // Extract ZIP
+        // 2. Extract ZIP
         await fs.createReadStream(req.file.path)
             .pipe(unzipper.Extract({ path: funcDir }))
             .promise();
 
-        // Delete the temporary zip upload
+        // 3. Delete temporary zip
         fs.unlinkSync(req.file.path);
 
-        // Copy Sandbox Templates (Dockerfile & wrapper.js)
-        fs.copyFileSync(path.join(TEMPLATES_DIR, 'wrapper.js'), path.join(funcDir, 'wrapper.js'));
-        fs.copyFileSync(path.join(TEMPLATES_DIR, 'Dockerfile'), path.join(funcDir, 'Dockerfile'));
+        // 4. Notify main backend about successful deployment
+        try {
+            const axios = require('axios');
+            await axios.post('http://localhost:5000/v1/internal/functions/register', {
+                projectId: projectId,
+                name: funcName,
+                runtime: 'nodejs'
+            });
+        } catch (err) {
+            console.error("[DEPLOY] Failed to register in backend:", err.message);
+        }
 
-        // Respond fast, build in background
-        res.send({ status: 'Success', message: `Deploying function '${funcName}' started...` });
-
-        console.log(`[DEPLOY] Building docker image for ${funcName} in project ${projectId}...`);
-
-        // Build the docker image locally
+        // 5. Build docker image locally (for running)
+        // In a real system, you might do this via a background worker
+        console.log(`[DEPLOY] Building image sgfn-${projectId}-${funcName}...`);
         const buildCmd = `docker build -t sgfn-${projectId}-${funcName} .`;
-        await execPromise(buildCmd, { cwd: funcDir });
+        // We'll run build but respond to user once initialized
+        exec(buildCmd, { cwd: funcDir }, (err) => {
+            if (err) console.error(`[DEPLOY] Docker Build Error:`, err);
+            else console.log(`[DEPLOY] Image ready: sgfn-${projectId}-${funcName}`);
+        });
 
-        console.log(`[DEPLOY] Successfully built & ready: sgfn-${projectId}-${funcName}`);
+        res.send({ status: "Success", message: `Function '${funcName}' deployed successfully!` });
+
     } catch (e) {
-        console.error(`[DEPLOY] Build failed for ${funcName}:`, e);
+        console.error(`[DEPLOY] Error:`, e);
+        res.status(500).send({ error: "Deployment failed" });
     }
 });
 

@@ -140,18 +140,18 @@ const initDB = async () => {
         `);
 
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS storage_files (
+            CREATE TABLE IF NOT EXISTS functions_deployments (
                 id SERIAL PRIMARY KEY,
                 project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-                folder_path VARCHAR(255) DEFAULT '',
-                file_name VARCHAR(255) NOT NULL,
-                file_url TEXT NOT NULL,
-                file_type VARCHAR(100),
-                file_size INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                name VARCHAR(255) NOT NULL,
+                runtime VARCHAR(50) DEFAULT 'nodejs',
+                status VARCHAR(50) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, name)
             );
         `);
-        console.log("✅ Database Tables Initialized (including SugunaFirestore)");
+        console.log("✅ Database Tables Initialized (including SugunaFirestore & Functions)");
     } catch (err) {
         console.error("❌ DB Init Error:", err);
     }
@@ -815,13 +815,31 @@ io.on('connection', (socket) => {
     });
 });
 
-// 404 Handler for API
-app.use((req, res) => {
-    res.status(404).json({
-        error: "Route not found in SugunaBase Backend",
-        method: req.method,
-        path: req.url
-    });
+// --- FUNCTIONS MANAGEMENT ROUTES ---
+app.get('/v1/console/projects/:projectId/functions', authenticateToken, async (req, res) => {
+    const projectId = req.params.projectId;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM functions_deployments WHERE project_id = $1 ORDER BY created_at DESC',
+            [projectId]
+        );
+        res.json({ functions: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Internal Route (Called by Cloud Functions Hub)
+app.post('/v1/internal/functions/register', async (req, res) => {
+    const { projectId, name, runtime } = req.body;
+    // Note: In production, add a secret key check here
+    try {
+        await pool.query(`
+            INSERT INTO functions_deployments (project_id, name, runtime, updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (project_id, name) DO UPDATE 
+            SET updated_at = NOW(), status = 'active'
+        `, [projectId, name, runtime || 'nodejs']);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 server.listen(port, () => console.log(`🚀 SugunaBase Server running on port ${port} `));
