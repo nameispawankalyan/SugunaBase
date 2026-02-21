@@ -1,6 +1,6 @@
 'use client';
 
-import { UploadCloud, Folder, File, Image as ImageIcon, Video, Search, Grid, MoreVertical, ChevronRight, X, Link as LinkIcon, Download, Copy, Check } from 'lucide-react';
+import { UploadCloud, Folder, File, Image as ImageIcon, Video, Search, Grid, MoreVertical, ChevronRight, X, Link as LinkIcon, Download, Copy, Check, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 
@@ -20,6 +20,8 @@ export default function StoragePage() {
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
     const [newFolderName, setNewFolderName] = useState<string>('');
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
+    const [isDeleting, setIsDeleting] = useState<boolean>(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -252,9 +254,12 @@ export default function StoragePage() {
         });
     };
 
-    const handleDeleteSelected = async () => {
-        if (!confirm(`Are you sure you want to delete ${selectedItems.length} selected item(s)?`)) return;
+    const handleDeleteSelected = () => {
+        setIsDeleteDialogOpen(true);
+    };
 
+    const confirmDeleteSelected = async () => {
+        setIsDeleting(true);
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(`https://api.suguna.co/v1/console/projects/${params.id}/storage`, {
@@ -272,11 +277,47 @@ export default function StoragePage() {
             await fetchFiles();
         } catch (err: any) {
             alert('Failed to delete items: ' + err.message);
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteDialogOpen(false);
         }
     };
 
     return (
         <div className="flex h-[calc(100vh-theme(spacing.16))] -m-8 mt-0 bg-gray-50/50">
+            {isDeleteDialogOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-[#2B2B2B] text-[#E8EAED] w-[450px] rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-6 py-5 border-b border-[#3C4043]">
+                            <h2 className="text-xl font-medium tracking-wide">Delete files</h2>
+                        </div>
+                        <div className="px-6 py-6 border-b border-[#3C4043]/50">
+                            <div className="bg-[#3D2C2A] text-[#F28B82] p-4 rounded-lg flex items-start gap-3 border border-[#F28B82]/20">
+                                <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                                <p className="text-[14px] font-medium leading-relaxed">
+                                    You may be deleting user data. After you delete this, it can't be recovered.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 bg-[#2B2B2B] flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => setIsDeleteDialogOpen(false)}
+                                disabled={isDeleting}
+                                className="px-4 py-2 rounded-lg text-sm font-medium text-[#8AB4F8] hover:bg-[#8AB4F8]/10 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDeleteSelected}
+                                disabled={isDeleting}
+                                className="px-5 py-2 rounded-lg text-sm font-medium bg-[#E24E42] text-white hover:bg-[#D93025] transition-colors disabled:opacity-60 flex items-center shadow-lg shadow-[#E24E42]/20"
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* Main Content Area */}
             <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 p-8 ${selectedFile ? 'pr-8' : ''}`}>
                 <div className="flex items-center justify-between mb-6">
