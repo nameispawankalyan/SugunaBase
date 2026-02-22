@@ -214,16 +214,42 @@ program
             archive.finalize();
 
         } else if (service === 'hosting') {
-            const finalSiteId = siteId || 'main'; // default to main
-            const publicDir = path.join(process.cwd(), 'public_' + finalSiteId);
+            let finalSiteId = siteId;
+            let deployDir;
 
-            // Backwards compatibility with just 'public' if they didn't specify a siteId
-            const deployDir = (!siteId && fs.existsSync(path.join(process.cwd(), 'public')))
-                ? path.join(process.cwd(), 'public')
-                : publicDir;
+            if (!finalSiteId) {
+                const fs = require('fs');
+                const dirs = fs.readdirSync(process.cwd()).filter(f => fs.statSync(path.join(process.cwd(), f)).isDirectory());
+                const potentialSites = dirs.filter(d => d === 'public' || d.startsWith('public_'));
+
+                if (potentialSites.length === 0) {
+                    console.log('❌ No hosting directories found. Create one or run "sugunabase init hosting".');
+                    return process.exit(1);
+                } else if (potentialSites.length === 1) {
+                    deployDir = path.join(process.cwd(), potentialSites[0]);
+                    finalSiteId = potentialSites[0] === 'public' ? 'main' : potentialSites[0].replace('public_', '');
+                    console.log(`🔍 Auto-detected hosting site: "${finalSiteId}"`);
+                } else {
+                    const { selectedSite } = await prompts({
+                        type: 'select',
+                        name: 'selectedSite',
+                        message: 'Multiple hosting sites found. Which one do you want to deploy?',
+                        choices: potentialSites.map(d => ({ title: d, value: d }))
+                    });
+                    if (!selectedSite) process.exit(1);
+                    deployDir = path.join(process.cwd(), selectedSite);
+                    finalSiteId = selectedSite === 'public' ? 'main' : selectedSite.replace('public_', '');
+                }
+            } else {
+                deployDir = path.join(process.cwd(), 'public_' + finalSiteId);
+                // Backwards compatibility with just 'public' if they didn't specify a siteId initially but passed 'main' manually
+                if (!fs.existsSync(deployDir) && finalSiteId === 'main') {
+                    deployDir = path.join(process.cwd(), 'public');
+                }
+            }
 
             if (!fs.existsSync(deployDir)) {
-                console.log(`❌ "${path.basename(deployDir)}" directory not found. Please create it or run "sugunabase init hosting ${finalSiteId}".`);
+                console.log(`❌ Directory for site "${finalSiteId}" not found. Try "sugunabase init hosting ${finalSiteId}".`);
                 process.exit(1);
             }
 
