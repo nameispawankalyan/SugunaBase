@@ -15,22 +15,28 @@ export default function HostingPage({ params }: { params: Promise<{ id: string }
     const { id } = use(params);
     const [sites, setSites] = useState<HostingSite[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<number | null>(null);
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
     useEffect(() => {
-        if (!token) return;
+        if (!token) {
+            setLoading(false);
+            setError("Authentication token missing. Please log in again.");
+            return;
+        }
         const fetchSites = async () => {
             try {
                 const res = await fetch(`https://api.suguna.co/v1/console/projects/${id}/hosting/sites`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                if (!res.ok) throw new Error('API Request Failed');
+                if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`);
                 const data = await res.json();
-                setSites(data.sites);
-            } catch (err) {
+                setSites(data.sites || []);
+            } catch (err: any) {
                 console.error("Failed to fetch hosting sites:", err);
+                setError(err.message || "An unexpected error occurred.");
             } finally {
                 setLoading(false);
             }
@@ -48,6 +54,22 @@ export default function HostingPage({ params }: { params: Promise<{ id: string }
         return (
             <div className="flex justify-center items-center h-48">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-8">
+                <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-red-600 mb-4 px-6 font-medium">
+                    ⚠️ Error: {error}
+                </div>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                    Retry Connection
+                </button>
             </div>
         );
     }

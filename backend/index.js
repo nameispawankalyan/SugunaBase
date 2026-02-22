@@ -742,6 +742,8 @@ app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUplo
 
         if (siteResult.rows.length > 0) {
             secureId = siteResult.rows[0].secure_id;
+            // Update timestamp on re-deploy
+            await pool.query('UPDATE hosting_sites SET updated_at = CURRENT_TIMESTAMP WHERE project_id = $1 AND site_name = $2', [projectId, siteId]);
         } else {
             secureId = crypto.randomBytes(8).toString('hex'); // Generate 16char secure ID
             await pool.query('INSERT INTO hosting_sites (project_id, site_name, secure_id) VALUES ($1, $2, $3)', [projectId, siteId, secureId]);
