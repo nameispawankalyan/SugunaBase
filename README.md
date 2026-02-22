@@ -150,9 +150,89 @@ fun deleteStorageItems(@Header("Authorization") token: String, @Path("id") proje
 
 ---
 
-## 🖥️ 4. Suguna Console
+---
+
+## ⚡ 4. Suguna Cloud Functions (Serverless Logic)
+Run your backend logic on Suguna Edge without managing servers. Supports **HTTP Triggers** and **Scheduled Jobs**.
+
+### **A. Creating a Function**
+1. Create a `functions` folder in your project.
+2. Inside, initialize a node project: `npm init -y`
+3. Create an `index.js` file:
+```javascript
+// Sample HTTP Function
+exports.helloWorld = async (req, res) => {
+    const name = req.query.name || "Developer";
+    res.json({ 
+        success: true, 
+        message: `Welcome to SugunaBase, ${name}!`,
+        timestamp: new Date().toISOString()
+    });
+};
+```
+
+### **B. Function Types**
+- **HTTP Functions**: Triggered via a unique URL provided after deployment.
+- **Scheduled Functions**: Runs automatically based on a Cron expression (configured via `sugunabase.json` or Console).
+  - *Example Cron*: `0 0 * * *` (Every day at midnight).
+
+### **C. Deployment**
+```bash
+sugunabase deploy functions
+```
+
+---
+
+## 🌐 5. Suguna Hosting (Multi-Site CDN)
+Deploy production-ready web apps with global CDN, zero-config SSL, and unique secure URLs.
+
+### **A. Multi-Site Concept**
+You can host multiple sites (e.g., Landing Page, Admin Portal) within a single SugunaBase project.
+- **main**: Default site (stored in `public` folder).
+- **custom-site**: Additional sites (stored in `public_custom-site` folders).
+
+### **B. Initialization & Directory Structure**
+```bash
+# Initialize default site
+sugunabase init hosting main    # creates 'public' folder
+
+# Initialize admin site
+sugunabase init hosting admin   # creates 'public_admin' folder
+```
+
+### **C. Building & Deploying**
+1. Place your HTML/CSS/JS files inside the respective `public*` folder.
+2. Deploy using CLI:
+```bash
+# Deploy all detected sites (interactive choice)
+sugunabase deploy hosting
+
+# Direct deployment
+sugunabase deploy hosting admin
+```
+
+### **D. Secure URL Structure**
+SugunaBase generates a 16-character **Secure Hash** for every site to prevent unauthorized access.
+- **URL Format**: `https://api.suguna.co/site/{projectId}/{siteName}/{secureHash}`
+
+---
+
+## 🛠️ 6. SugunaBase CLI (Developer Tools)
+Install the CLI to manage your cloud resources from the terminal.
+
+| Command | Description |
+|---------|-------------|
+| `sugunabase login` | Authenticate your terminal with your Suguna account. |
+| `sugunabase init hosting [name]` | Setup local directory for a new web project. |
+| `sugunabase deploy hosting [name]` | Bundle and push web files to global CDN. |
+| `sugunabase deploy functions` | Deploy serverless Node.js functions. |
+
+---
+
+## 🖥️ 7. Suguna Console
 Manage your projects, auth, database, and storage visually:
 - **Project URL**: [https://www.suguna.co](https://www.suguna.co)
 
 ---
 **Build with Confidence on SugunaBase!** 🚀
+
