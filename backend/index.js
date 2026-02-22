@@ -775,6 +775,37 @@ app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUplo
     }
 });
 
+const renderHostingError = (title, message, subtext) => `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title} | Suguna Hosting</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; font-family: 'Outfit', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; }
+        .container { max-width: 500px; padding: 2rem; }
+        .icon { font-size: 80px; margin-bottom: 1.5rem; animation: pulse 2s infinite; }
+        h1 { font-size: 2.5rem; font-weight: 900; margin: 0; background: linear-gradient(135deg, #a78bfa, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        p { color: #94a3b8; font-size: 1.1rem; margin-top: 1rem; line-height: 1.6; }
+        .sub { margin-top: 2rem; color: #475569; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; }
+        .btn { display: inline-block; margin-top: 2rem; padding: 0.8rem 2rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; text-decoration: none; border-radius: 50px; transition: all 0.3s; }
+        .btn:hover { background: #6366f1; border-color: #6366f1; transform: translateY(-3px); }
+        @keyframes pulse { 0% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.8; transform: scale(1); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🕸️</div>
+        <h1>${title}</h1>
+        <p>${message}</p>
+        <div class="sub">${subtext}</div>
+        <a href="https://suguna.co" class="btn">Explore SugunaBase</a>
+    </div>
+</body>
+</html>`;
+
 // Serve Hosted Sites dynamically
 app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
     const { projectId, siteId, secureId } = req.params;
@@ -790,26 +821,26 @@ app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
         const check = await pool.query(statusQuery, [projectId, siteId]);
 
         if (check.rows.length === 0) {
-            return res.status(404).send('<h1>Suguna Hosting: Site not found</h1>');
+            return res.status(404).send(renderHostingError('Site Not Found', 'The requested website does not exist in our global registry.', '404 GLOBAL SEARCH FAILED'));
         }
 
         const { secure_id, site_active, project_active } = check.rows[0];
 
         if (!project_active) {
-            return res.status(403).send('<h1>Suguna Project Suspended</h1><p>The project associated with this site is currently inactive.</p>');
+            return res.status(403).send(renderHostingError('Project Suspended', 'This project has been temporarily disabled by the administrator.', 'PROJECT_INACTIVE_BLOCK'));
         }
 
         if (!site_active) {
-            return res.status(403).send('<h1>Suguna Hosting: Site Inactive</h1><p>This specific site has been deactivated by the developer.</p>');
+            return res.status(403).send(renderHostingError('Site Inactive', 'The developer has temporarily taken this site offline.', 'USER_REQUESTED_DEACTIVATION'));
         }
 
         if (secure_id !== secureId) {
-            return res.status(403).send('<h1>Suguna Hosting: Access Denied</h1><p>Invalid secure link.</p>');
+            return res.status(403).send(renderHostingError('Access Denied', 'Security mismatch. Your connection lack the required secure credentials.', 'SECURITY_HASH_MISMATCH'));
         }
 
         const sitePath = path.join(__dirname, 'hosting_sites', projectId, siteId);
         if (!fs.existsSync(sitePath)) {
-            return res.status(404).send('<h1>Suguna Hosting: Content Missing</h1><p>The files for this site are no longer available.</p>');
+            return res.status(404).send(renderHostingError('Content Missing', 'The deployment assets for this site could not be found.', 'DEPLOYMENT_FILES_NOT_DISCOVERED'));
         }
 
         express.static(sitePath)(req, res, next);
