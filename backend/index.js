@@ -775,30 +775,32 @@ app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUplo
     }
 });
 
-const renderHostingError = (title, message, subtext) => `
+const renderHostingError = (code, title, message, subtext) => `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title} | Suguna Hosting</title>
+    <title>${code} ${title} | Suguna Hosting</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         body { margin: 0; font-family: 'Outfit', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; }
         .container { max-width: 500px; padding: 2rem; }
         .icon { font-size: 80px; margin-bottom: 1.5rem; animation: pulse 2s infinite; }
+        .badge { display: inline-block; background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 4px 12px; rounded-radius: 6px; font-weight: bold; font-size: 0.8rem; margin-bottom: 1rem; border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 6px; }
         h1 { font-size: 2.5rem; font-weight: 900; margin: 0; background: linear-gradient(135deg, #a78bfa, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         p { color: #94a3b8; font-size: 1.1rem; margin-top: 1rem; line-height: 1.6; }
-        .sub { margin-top: 2rem; color: #475569; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; }
+        .sub { margin-top: 2rem; color: #475569; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; font-family: monospace; }
         @keyframes pulse { 0% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.8; transform: scale(1); } }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="badge">HTTP ${code} RESPONSE</div>
         <div class="icon">🕸️</div>
         <h1>${title}</h1>
         <p>${message}</p>
-        <div class="sub">${subtext}</div>
+        <div class="sub">REF_ID: ${subtext}</div>
     </div>
 </body>
 </html>`;
@@ -818,31 +820,31 @@ app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
         const check = await pool.query(statusQuery, [projectId, siteId]);
 
         if (check.rows.length === 0) {
-            return res.status(404).send(renderHostingError('Site Not Found', 'The requested website does not exist in our global registry.', '404 GLOBAL SEARCH FAILED'));
+            return res.status(404).send(renderHostingError(404, 'Site Not Found', 'The requested website does not exist in our global registry.', 'GLOBAL_SEARCH_FAILED'));
         }
 
         const { secure_id, site_active, project_active } = check.rows[0];
 
         if (!project_active) {
-            return res.status(403).send(renderHostingError('Project Suspended', 'This project has been temporarily disabled by the administrator.', 'PROJECT_INACTIVE_BLOCK'));
+            return res.status(403).send(renderHostingError(403, 'Project Suspended', 'This project has been temporarily disabled by the administrator.', 'PROJECT_INACTIVE_BLOCK'));
         }
 
         if (!site_active) {
-            return res.status(403).send(renderHostingError('Site Inactive', 'The developer has temporarily taken this site offline.', 'USER_REQUESTED_DEACTIVATION'));
+            return res.status(403).send(renderHostingError(403, 'Site Inactive', 'The developer has temporarily taken this site offline.', 'USER_REQUESTED_DEACTIVATION'));
         }
 
         if (secure_id !== secureId) {
-            return res.status(403).send(renderHostingError('Access Denied', 'Security mismatch. Your connection lack the required secure credentials.', 'SECURITY_HASH_MISMATCH'));
+            return res.status(403).send(renderHostingError(403, 'Access Denied', 'Security mismatch. Your connection lack the required secure credentials.', 'SECURITY_HASH_MISMATCH'));
         }
 
         const sitePath = path.join(__dirname, 'hosting_sites', projectId, siteId);
         if (!fs.existsSync(sitePath)) {
-            return res.status(404).send(renderHostingError('Content Missing', 'The deployment assets for this site could not be found.', 'DEPLOYMENT_FILES_NOT_DISCOVERED'));
+            return res.status(404).send(renderHostingError(404, 'Content Missing', 'The deployment assets for this site could not be found.', 'DEPLOYMENT_FILES_NOT_DISCOVERED'));
         }
 
         // Serve static files, but if not found, show branded 404
         express.static(sitePath)(req, res, () => {
-            res.status(404).send(renderHostingError('404: Not Found', 'The specific page or resource you are looking for does not exist on this site.', 'FILE_NOT_FOUND_IN_SITE'));
+            res.status(404).send(renderHostingError(404, 'Page Not Found', 'The specific page or resource you are looking for does not exist on this site.', 'FILE_NOT_FOUND_IN_SITE'));
         });
     } catch (e) {
         res.status(500).send('Internal Server Error');
@@ -851,7 +853,7 @@ app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
 
 // Catch invalid/short hosting URLs (e.g., /site, /site/15, etc.)
 app.all(['/site', '/site/*'], (req, res) => {
-    res.status(400).send(renderHostingError('Invalid URL', 'The hosting link is incomplete. Please use the full URL provided in your dashboard.', 'URL_STRUCTURE_INVALID'));
+    res.status(400).send(renderHostingError(400, 'Invalid URL', 'The hosting link is incomplete. Please use the full URL provided in your dashboard.', 'URL_STRUCTURE_INVALID'));
 });
 
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
