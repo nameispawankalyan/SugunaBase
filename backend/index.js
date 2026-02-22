@@ -827,6 +827,19 @@ app.get('/v1/internal/projects/:projectId/status', async (req, res) => {
 
 // --- PROTECTED ROUTES (Require Login) ---
 
+// Get Hosting Sites for a Project
+app.get('/v1/console/projects/:projectId/hosting/sites', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM hosting_sites WHERE project_id = $1 ORDER BY created_at DESC',
+            [req.params.projectId]
+        );
+        res.json({ sites: result.rows });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Get User's Projects
 app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
     try {
