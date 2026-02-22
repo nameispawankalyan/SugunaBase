@@ -165,11 +165,14 @@ const initDB = async () => {
                 project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
                 site_name VARCHAR(100) NOT NULL,
                 secure_id VARCHAR(100) NOT NULL UNIQUE,
+                is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(project_id, site_name)
             );
         `);
+        // Migration for existing table
+        try { await pool.query('ALTER TABLE hosting_sites ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;'); } catch (e) { }
         // Migration: Add columns if they don't exist
         try {
             await pool.query("ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS region VARCHAR(100) DEFAULT 'asia-south1';");
@@ -777,14 +780,36 @@ app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
     const { projectId, siteId, secureId } = req.params;
 
     try {
-        const siteCheck = await pool.query('SELECT secure_id FROM hosting_sites WHERE project_id = $1 AND site_name = $2', [projectId, siteId]);
-        if (siteCheck.rows.length === 0 || siteCheck.rows[0].secure_id !== secureId) {
-            return res.status(403).send('<h1>Suguna Hosting: Access Denied</h1><p>Invalid secure link or site not found.</p>');
+        // Double check: 1. Project is Active, 2. Site is Active, 3. Secure ID matches
+        const statusQuery = `
+            SELECT h.secure_id, h.is_active as site_active, p.is_active as project_active
+            FROM hosting_sites h
+            JOIN projects p ON h.project_id = p.id
+            WHERE p.id = $1 AND h.site_name = $2
+        `;
+        const check = await pool.query(statusQuery, [projectId, siteId]);
+
+        if (check.rows.length === 0) {
+            return res.status(404).send('<h1>Suguna Hosting: Site not found</h1>');
+        }
+
+        const { secure_id, site_active, project_active } = check.rows[0];
+
+        if (!project_active) {
+            return res.status(403).send('<h1>Suguna Project Suspended</h1><p>The project associated with this site is currently inactive.</p>');
+        }
+
+        if (!site_active) {
+            return res.status(403).send('<h1>Suguna Hosting: Site Inactive</h1><p>This specific site has been deactivated by the developer.</p>');
+        }
+
+        if (secure_id !== secureId) {
+            return res.status(403).send('<h1>Suguna Hosting: Access Denied</h1><p>Invalid secure link.</p>');
         }
 
         const sitePath = path.join(__dirname, 'hosting_sites', projectId, siteId);
         if (!fs.existsSync(sitePath)) {
-            return res.status(404).send('<h1>Suguna Hosting: Site not found</h1><p>The site for this project has not been deployed yet.</p>');
+            return res.status(404).send('<h1>Suguna Hosting: Content Missing</h1><p>The files for this site are no longer available.</p>');
         }
 
         express.static(sitePath)(req, res, next);
@@ -840,6 +865,39 @@ app.get('/v1/console/projects/:projectId/hosting/sites', authenticateToken, asyn
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
+});
+
+// Toggle Hosting Site Status (Active/Inactive)
+app.post('/v1/console/projects/:projectId/hosting/sites/:siteId/toggle', authenticateToken, async (req, res) => {
+    const { projectId, siteId } = req.params;
+    const { active } = req.body;
+    try {
+        await pool.query(
+            'UPDATE hosting_sites SET is_active = $1 WHERE project_id = $2 AND id = $3',
+            [active, projectId, siteId]
+        );
+        res.json({ success: true, message: `Site ${active ? 'activated' : 'deactivated'} successfully` });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Delete Hosting Site
+app.delete('/v1/console/projects/:projectId/hosting/sites/:siteId', authenticateToken, async (req, res) => {
+    const { projectId, siteId } = req.params;
+    try {
+        // Get site name first to delete files
+        const siteResult = await pool.query('SELECT site_name FROM hosting_sites WHERE project_id = $1 AND id = $2', [projectId, siteId]);
+        if (siteResult.rows.length > 0) {
+            const siteName = siteResult.rows[0].site_name;
+            const siteDir = path.join(__dirname, 'hosting_sites', projectId, siteName);
+            if (fs.existsSync(siteDir)) {
+                fs.rmSync(siteDir, { recursive: true, force: true });
+            }
+            await pool.query('DELETE FROM hosting_sites WHERE id = $1', [siteId]);
+            res.json({ success: true, message: "Site deleted permanently" });
+        } else {
+            res.status(404).json({ error: "Site not found" });
+        }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Get User's Projects

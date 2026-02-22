@@ -1,12 +1,13 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import { Globe, ExternalLink, Command, Copy, CheckCircle2 } from 'lucide-react';
+import { Globe, ExternalLink, Command, Copy, CheckCircle2, Trash2, Power, PowerOff } from 'lucide-react';
 
 interface HostingSite {
     id: number;
     site_name: string;
     secure_id: string;
+    is_active: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -17,30 +18,32 @@ export default function HostingPage({ params }: { params: Promise<{ id: string }
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<number | null>(null);
+    const [processingId, setProcessingId] = useState<number | null>(null);
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
-    useEffect(() => {
+    const fetchSites = async () => {
         if (!token) {
             setLoading(false);
             setError("Authentication token missing. Please log in again.");
             return;
         }
-        const fetchSites = async () => {
-            try {
-                const res = await fetch(`https://api.suguna.co/v1/console/projects/${id}/hosting/sites`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`);
-                const data = await res.json();
-                setSites(data.sites || []);
-            } catch (err: any) {
-                console.error("Failed to fetch hosting sites:", err);
-                setError(err.message || "An unexpected error occurred.");
-            } finally {
-                setLoading(false);
-            }
-        };
+        try {
+            const res = await fetch(`https://api.suguna.co/v1/console/projects/${id}/hosting/sites`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`);
+            const data = await res.json();
+            setSites(data.sites || []);
+        } catch (err: any) {
+            console.error("Failed to fetch hosting sites:", err);
+            setError(err.message || "An unexpected error occurred.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchSites();
     }, [id, token]);
 
@@ -48,6 +51,42 @@ export default function HostingPage({ params }: { params: Promise<{ id: string }
         navigator.clipboard.writeText(text);
         setCopiedId(siteId);
         setTimeout(() => setCopiedId(null), 2000);
+    };
+
+    const toggleSite = async (siteId: number, currentStatus: boolean) => {
+        if (!confirm(`Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this site?`)) return;
+        setProcessingId(siteId);
+        try {
+            const res = await fetch(`https://api.suguna.co/v1/console/projects/${id}/hosting/sites/${siteId}/toggle`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ active: !currentStatus })
+            });
+            if (res.ok) await fetchSites();
+        } catch (err) {
+            alert("Action failed. Check server connection.");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const deleteSite = async (siteId: number, siteName: string) => {
+        if (!confirm(`Permanently delete "${siteName}"? This action cannot be undone.`)) return;
+        setProcessingId(siteId);
+        try {
+            const res = await fetch(`https://api.suguna.co/v1/console/projects/${id}/hosting/sites/${siteId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) await fetchSites();
+        } catch (err) {
+            alert("Delete failed.");
+        } finally {
+            setProcessingId(null);
+        }
     };
 
     if (loading) {
@@ -116,49 +155,73 @@ export default function HostingPage({ params }: { params: Promise<{ id: string }
                     </h1>
                     <p className="text-gray-500 mt-2 text-lg">Manage your live SugunaBase Hosting sites.</p>
                 </div>
-                <p className="text-sm font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-full border border-blue-100 shadow-sm">
-                    {sites.length} Active {sites.length === 1 ? 'Site' : 'Sites'}
-                </p>
+                <div className="flex flex-col items-end gap-1">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Global Status</p>
+                    <p className="text-sm font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-full border border-blue-100 shadow-sm">
+                        {sites.length} Active {sites.length === 1 ? 'Site' : 'Sites'}
+                    </p>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {sites.map(site => {
                     const siteUrl = `https://api.suguna.co/site/${id}/${site.site_name}/${site.secure_id}`;
+                    const isProcessing = processingId === site.id;
 
                     return (
-                        <div key={site.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+                        <div key={site.id} className={`bg-white p-6 rounded-2xl border ${site.is_active ? 'border-gray-200' : 'border-red-100 bg-red-50/10'} shadow-sm hover:shadow-md transition-all group relative overflow-hidden`}>
                             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-50 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none"></div>
 
                             <div className="flex items-center gap-4 mb-4 relative z-10">
-                                <div className="h-12 w-12 bg-gradient-to-br from-blue-100 to-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100/50 shadow-inner">
-                                    <Globe className="h-6 w-6 text-blue-600" />
+                                <div className={`h-12 w-12 ${site.is_active ? 'bg-gradient-to-br from-blue-100' : 'bg-gray-100'} to-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100/50 shadow-inner`}>
+                                    <Globe className={`h-6 w-6 ${site.is_active ? 'text-blue-600' : 'text-gray-400'}`} />
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+                                    <h3 className={`font-bold ${site.is_active ? 'text-gray-900' : 'text-gray-500'} text-lg flex items-center gap-2`}>
                                         {site.site_name}
-                                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Live"></span>
+                                        <span className={`w-2 h-2 rounded-full ${site.is_active ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} title={site.is_active ? 'Live' : 'Inactive'}></span>
                                     </h3>
-                                    <p className="text-xs text-gray-400">Deployed: {new Date(site.updated_at).toLocaleString()}</p>
+                                    <p className="text-xs text-gray-400">Synced: {new Date(site.updated_at).toLocaleString()}</p>
+                                </div>
+
+                                <div className="flex gap-1">
+                                    <button
+                                        disabled={isProcessing}
+                                        onClick={() => toggleSite(site.id, site.is_active)}
+                                        className={`p-2 rounded-lg transition-colors ${site.is_active ? 'text-orange-500 hover:bg-orange-50' : 'text-green-600 hover:bg-green-50'} ${isProcessing ? 'opacity-30' : ''}`}
+                                        title={site.is_active ? 'Deactivate Site' : 'Activate Site'}
+                                    >
+                                        {site.is_active ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                                    </button>
+                                    <button
+                                        disabled={isProcessing}
+                                        onClick={() => deleteSite(site.id, site.site_name)}
+                                        className={`p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors ${isProcessing ? 'opacity-30' : ''}`}
+                                        title="Delete Site"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
                                 </div>
                             </div>
 
-                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 mb-4 flex items-center justify-between relative z-10 hover:border-blue-200 transition-colors">
-                                <span className="font-mono text-xs text-gray-600 truncate mr-3 max-w-[80%]">
+                            <div className={`bg-gray-50 rounded-xl p-3 border border-gray-100 mb-4 flex items-center justify-between relative z-10 ${site.is_active ? 'hover:border-blue-200' : 'opacity-60'} transition-colors`}>
+                                <span className={`font-mono text-xs ${site.is_active ? 'text-gray-600' : 'text-gray-400'} truncate mr-3 max-w-[80%]`}>
                                     {siteUrl}
                                 </span>
                                 <div className="flex gap-2 min-w-[56px] justify-end">
                                     <button
+                                        disabled={!site.is_active}
                                         onClick={() => handleCopy(siteUrl, site.id)}
-                                        className="text-gray-400 hover:text-blue-600 transition-colors p-1"
+                                        className="text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors p-1"
                                         title="Copy URL"
                                     >
                                         {copiedId === site.id ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                                     </button>
                                     <a
-                                        href={siteUrl}
-                                        target="_blank"
+                                        href={site.is_active ? siteUrl : '#'}
+                                        target={site.is_active ? "_blank" : "_self"}
                                         rel="noopener noreferrer"
-                                        className="text-gray-400 hover:text-blue-600 transition-colors p-1"
+                                        className={`text-gray-400 hover:text-blue-600 transition-colors p-1 ${!site.is_active ? 'pointer-events-none opacity-30' : ''}`}
                                         title="Open in new tab"
                                     >
                                         <ExternalLink className="h-4 w-4" />
@@ -166,9 +229,15 @@ export default function HostingPage({ params }: { params: Promise<{ id: string }
                                 </div>
                             </div>
 
+                            {!site.is_active && (
+                                <div className="mb-4 text-xs font-semibold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 inline-block relative z-10">
+                                    Offline: Requests will be blocked
+                                </div>
+                            )}
+
                             <div className="flex justify-between items-center text-xs relative z-10">
                                 <span className="text-gray-500 flex items-center gap-1">
-                                    <span className="opacity-70">Secure Hash:</span>
+                                    <span className="opacity-70">Security:</span>
                                     <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{site.secure_id.substring(0, 8)}...</span>
                                 </span>
                             </div>
