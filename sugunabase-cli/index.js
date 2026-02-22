@@ -88,9 +88,9 @@ program
 
 // ============== 2. INIT COMMAND ==============
 program
-    .command('init [service]')
+    .command('init [service] [siteId]')
     .description('Initialize a new service: "functions" or "hosting"')
-    .action((service) => {
+    .action((service, siteId) => {
         if (!service) {
             console.log('❌ Please specify what to initialize: "functions" or "hosting".');
             console.log('   Example: sugunabase init functions');
@@ -121,21 +121,22 @@ program
             console.log(' 3. Run: sugunabase deploy functions');
 
         } else if (service === 'hosting') {
-            const publicDir = path.join(cwd, 'public');
+            const finalSiteId = siteId || 'main'; // default to main
+            const publicDir = path.join(cwd, 'public_' + finalSiteId);
             if (fs.existsSync(publicDir)) {
-                console.log('❌ "public" directory already exists.');
+                console.log(`❌ "${publicDir}" directory already exists.`);
                 process.exit(1);
             }
             fs.mkdirSync(publicDir);
 
-            const indexHtmlContent = `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8">\n  <title>SugunaBase Hosting</title>\n  <style>\n    body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fafafa; }\n    .box { text-align: center; background: white; padding: 3rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }\n    h1 { color: #6c2bd9; font-weight: 900; }\n    p { color: #888; }\n  </style>\n</head>\n<body>\n  <div class="box">\n    <svg width="60" fill="none" stroke="#6c2bd9" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>\n    <h1>Welcome to SugunaBase Hosting!</h1>\n    <p>Your web app is now ready to be deployed globally.</p>\n  </div>\n</body>\n</html>`;
+            const indexHtmlContent = `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8">\n  <title>SugunaBase Hosting</title>\n  <style>\n    body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fafafa; }\n    .box { text-align: center; background: white; padding: 3rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }\n    h1 { color: #6c2bd9; font-weight: 900; }\n    p { color: #888; }\n  </style>\n</head>\n<body>\n  <div class="box">\n    <svg width="60" fill="none" stroke="#6c2bd9" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>\n    <h1>Welcome to SugunaBase Hosting!</h1>\n    <p>Your web app (${finalSiteId}) is now ready to be deployed globally.</p>\n  </div>\n</body>\n</html>`;
 
             fs.writeFileSync(path.join(publicDir, 'index.html'), indexHtmlContent);
 
-            console.log('✅ Hosting initialized successfully!');
+            console.log(`✅ Hosting initialized successfully in "public_${finalSiteId}"!`);
             console.log('Next steps:');
-            console.log(' 1. Add your website files to the "public" folder');
-            console.log(' 2. Run: sugunabase deploy hosting');
+            console.log(` 1. Add your website files to the "public_${finalSiteId}" folder`);
+            console.log(` 2. Run: sugunabase deploy hosting ${finalSiteId}`);
         } else {
             console.log('❌ Invalid service. Use "functions" or "hosting".');
             process.exit(1);
@@ -144,9 +145,9 @@ program
 
 // ============== 3. DEPLOY COMMAND ==============
 program
-    .command('deploy [service]')
+    .command('deploy [service] [siteId]')
     .description('Deploy your service ("functions" or "hosting") to SugunaBase Servers')
-    .action(async (service) => {
+    .action(async (service, siteId) => {
         if (!fs.existsSync(CONFIG_PATH)) {
             console.log('❌ You are not logged in. Please run "sugunabase login" first.');
             process.exit(1);
@@ -213,25 +214,32 @@ program
             archive.finalize();
 
         } else if (service === 'hosting') {
-            const publicDir = path.join(process.cwd(), 'public');
-            if (!fs.existsSync(publicDir)) {
-                console.log('❌ "public" directory not found. Create it or run "sugunabase init hosting".');
+            const finalSiteId = siteId || 'main'; // default to main
+            const publicDir = path.join(process.cwd(), 'public_' + finalSiteId);
+
+            // Backwards compatibility with just 'public' if they didn't specify a siteId
+            const deployDir = (!siteId && fs.existsSync(path.join(process.cwd(), 'public')))
+                ? path.join(process.cwd(), 'public')
+                : publicDir;
+
+            if (!fs.existsSync(deployDir)) {
+                console.log(`❌ "${path.basename(deployDir)}" directory not found. Please create it or run "sugunabase init hosting ${finalSiteId}".`);
                 process.exit(1);
             }
 
-            console.log(`📦 Packaging website for project: ${projectId}...`);
-            const zipPath = path.join(process.cwd(), '.hosting.zip');
+            console.log(`📦 Packaging website (${finalSiteId}) for project: ${projectId}...`);
+            const zipPath = path.join(process.cwd(), `.hosting_${finalSiteId}.zip`);
             const output = fs.createWriteStream(zipPath);
             const archive = archiver('zip', { zlib: { level: 9 } });
 
             output.on('close', async () => {
-                console.log('� Zip created. Uploading to Suguna CDN...');
+                console.log('🚀 Zip created. Uploading to Suguna CDN...');
                 try {
                     const formData = new FormData();
                     formData.append('hosting_files', fs.createReadStream(zipPath));
 
-                    console.log(`📡 Deploying hosting...`);
-                    const deployUrl = HOSTING_URL + '/deploy/' + projectId;
+                    console.log(`📡 Deploying hosting site: ${finalSiteId}...`);
+                    const deployUrl = HOSTING_URL + '/deploy/' + projectId + '/' + finalSiteId;
                     const response = await axios.post(deployUrl, formData, {
                         headers: {
                             ...formData.getHeaders(),
@@ -250,7 +258,7 @@ program
 
             archive.on('error', (err) => { throw err; });
             archive.pipe(output);
-            archive.directory(publicDir, false);
+            archive.directory(deployDir, false);
             archive.finalize();
 
         } else {

@@ -716,12 +716,12 @@ const unzipper = require('unzipper');
 
 const hostingUpload = multer({ dest: 'hosting_temp/' });
 
-app.post('/v1/hosting/deploy/:projectId', authenticateToken, hostingUpload.single('hosting_files'), async (req, res) => {
+app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUpload.single('hosting_files'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No zip file provided" });
 
-        const { projectId } = req.params;
-        const siteDir = path.join(__dirname, 'hosting_sites', projectId);
+        const { projectId, siteId } = req.params;
+        const siteDir = path.join(__dirname, 'hosting_sites', projectId, siteId);
 
         // 1. Create clean directory
         if (fs.existsSync(siteDir)) {
@@ -737,7 +737,7 @@ app.post('/v1/hosting/deploy/:projectId', authenticateToken, hostingUpload.singl
         // 3. Delete temporary zip
         fs.unlinkSync(req.file.path);
 
-        const liveUrl = `https://api.suguna.co/site/${projectId}`; // Or project_${projectId}.suguna.co if DNS allowed.
+        const liveUrl = `https://api.suguna.co/site/${projectId}/${siteId}`;
 
         res.json({ message: "Hosting Deploy Success", live_url: liveUrl });
     } catch (e) {
@@ -747,8 +747,8 @@ app.post('/v1/hosting/deploy/:projectId', authenticateToken, hostingUpload.singl
 });
 
 // Serve Hosted Sites dynamically
-app.use('/site/:projectId', (req, res, next) => {
-    const sitePath = path.join(__dirname, 'hosting_sites', req.params.projectId);
+app.use('/site/:projectId/:siteId', (req, res, next) => {
+    const sitePath = path.join(__dirname, 'hosting_sites', req.params.projectId, req.params.siteId);
     if (!fs.existsSync(sitePath)) {
         return res.status(404).send('<h1>Suguna Hosting: Site not found</h1><p>The site for this project has not been deployed yet.</p>');
     }
