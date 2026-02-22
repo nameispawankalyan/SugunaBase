@@ -68,6 +68,10 @@ app.post('/deploy-zip/:projectId/:name', authenticateToken, upload.single('proje
         // 3. Delete temporary zip
         fs.unlinkSync(req.file.path);
 
+        // 3.5 Copy wrapper and Dockerfile from templates into the function directory
+        fs.copyFileSync(path.join(TEMPLATES_DIR, 'Dockerfile'), path.join(funcDir, 'Dockerfile'));
+        fs.copyFileSync(path.join(TEMPLATES_DIR, 'wrapper.js'), path.join(funcDir, 'wrapper.js'));
+
         // 4. Notify main backend about successful deployment
         try {
             const axios = require('axios');
