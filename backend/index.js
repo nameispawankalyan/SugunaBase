@@ -791,6 +791,7 @@ const renderHostingError = (code, title, message, subtext) => `
         h1 { font-size: 2.5rem; font-weight: 900; margin: 0; background: linear-gradient(135deg, #a78bfa, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         p { color: #94a3b8; font-size: 1.1rem; margin-top: 1rem; line-height: 1.6; }
         .sub { margin-top: 2rem; color: #475569; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; font-family: monospace; }
+        .reason-box { margin-top: 1.5rem; padding: 10px; background: rgba(239, 68, 68, 0.05); border: 1px border-style: dashed border-color: rgba(239, 68, 68, 0.2); border-radius: 8px; font-family: monospace; font-size: 0.75rem; color: #f87171; display: inline-block; padding: 6px 15px; border: 1px dashed rgba(239, 68, 68, 0.3); }
         @keyframes pulse { 0% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.8; transform: scale(1); } }
     </style>
 </head>
@@ -800,7 +801,8 @@ const renderHostingError = (code, title, message, subtext) => `
         <div class="icon">🕸️</div>
         <h1>${title}</h1>
         <p>${message}</p>
-        <div class="sub">REF_ID: ${subtext}</div>
+        <div class="reason-box">TECHNICAL REASON: ${subtext}</div>
+        <div class="sub">SugunaBase Cloud Edge &bull; Hosting Engine v1</div>
     </div>
 </body>
 </html>`;
