@@ -790,8 +790,6 @@ const renderHostingError = (title, message, subtext) => `
         h1 { font-size: 2.5rem; font-weight: 900; margin: 0; background: linear-gradient(135deg, #a78bfa, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         p { color: #94a3b8; font-size: 1.1rem; margin-top: 1rem; line-height: 1.6; }
         .sub { margin-top: 2rem; color: #475569; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; }
-        .btn { display: inline-block; margin-top: 2rem; padding: 0.8rem 2rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; text-decoration: none; border-radius: 50px; transition: all 0.3s; }
-        .btn:hover { background: #6366f1; border-color: #6366f1; transform: translateY(-3px); }
         @keyframes pulse { 0% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.8; transform: scale(1); } }
     </style>
 </head>
@@ -801,7 +799,6 @@ const renderHostingError = (title, message, subtext) => `
         <h1>${title}</h1>
         <p>${message}</p>
         <div class="sub">${subtext}</div>
-        <a href="https://suguna.co" class="btn">Explore SugunaBase</a>
     </div>
 </body>
 </html>`;
