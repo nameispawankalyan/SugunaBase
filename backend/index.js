@@ -158,6 +158,18 @@ const initDB = async () => {
                 UNIQUE(project_id, name)
             );
         `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS hosting_sites (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                site_name VARCHAR(100) NOT NULL,
+                secure_id VARCHAR(100) NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, site_name)
+            );
+        `);
         // Migration: Add columns if they don't exist
         try {
             await pool.query("ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS region VARCHAR(100) DEFAULT 'asia-south1';");
@@ -713,6 +725,7 @@ app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, async 
 
 // --- SUGUNA HOSTING SYSTEM ---
 const unzipper = require('unzipper');
+const crypto = require('crypto');
 
 const hostingUpload = multer({ dest: 'hosting_temp/' });
 
@@ -722,6 +735,17 @@ app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUplo
 
         const { projectId, siteId } = req.params;
         const siteDir = path.join(__dirname, 'hosting_sites', projectId, siteId);
+
+        // Get or Create Secure URL ID
+        let secureId;
+        const siteResult = await pool.query('SELECT secure_id FROM hosting_sites WHERE project_id = $1 AND site_name = $2', [projectId, siteId]);
+
+        if (siteResult.rows.length > 0) {
+            secureId = siteResult.rows[0].secure_id;
+        } else {
+            secureId = crypto.randomBytes(8).toString('hex'); // Generate 16char secure ID
+            await pool.query('INSERT INTO hosting_sites (project_id, site_name, secure_id) VALUES ($1, $2, $3)', [projectId, siteId, secureId]);
+        }
 
         // 1. Create clean directory
         if (fs.existsSync(siteDir)) {
@@ -737,7 +761,7 @@ app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUplo
         // 3. Delete temporary zip
         fs.unlinkSync(req.file.path);
 
-        const liveUrl = `https://api.suguna.co/site/${projectId}/${siteId}`;
+        const liveUrl = `https://api.suguna.co/site/${projectId}/${siteId}/${secureId}`;
 
         res.json({ message: "Hosting Deploy Success", live_url: liveUrl });
     } catch (e) {
@@ -747,12 +771,24 @@ app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUplo
 });
 
 // Serve Hosted Sites dynamically
-app.use('/site/:projectId/:siteId', (req, res, next) => {
-    const sitePath = path.join(__dirname, 'hosting_sites', req.params.projectId, req.params.siteId);
-    if (!fs.existsSync(sitePath)) {
-        return res.status(404).send('<h1>Suguna Hosting: Site not found</h1><p>The site for this project has not been deployed yet.</p>');
+app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
+    const { projectId, siteId, secureId } = req.params;
+
+    try {
+        const siteCheck = await pool.query('SELECT secure_id FROM hosting_sites WHERE project_id = $1 AND site_name = $2', [projectId, siteId]);
+        if (siteCheck.rows.length === 0 || siteCheck.rows[0].secure_id !== secureId) {
+            return res.status(403).send('<h1>Suguna Hosting: Access Denied</h1><p>Invalid secure link or site not found.</p>');
+        }
+
+        const sitePath = path.join(__dirname, 'hosting_sites', projectId, siteId);
+        if (!fs.existsSync(sitePath)) {
+            return res.status(404).send('<h1>Suguna Hosting: Site not found</h1><p>The site for this project has not been deployed yet.</p>');
+        }
+
+        express.static(sitePath)(req, res, next);
+    } catch (e) {
+        res.status(500).send('Internal Server Error');
     }
-    express.static(sitePath)(req, res, next);
 });
 
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
