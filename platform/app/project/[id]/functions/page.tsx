@@ -523,10 +523,12 @@ export default function FunctionsPage({ params }: { params: Promise<{ id: string
                                                                 <div className="p-1.5 bg-emerald-50 rounded-lg"><Zap className="h-4 w-4 text-emerald-600" /></div>
                                                                 Test Run
                                                             </button>
-                                                            <button onClick={() => { setScheduleModal({ open: true, name: fn.name, cron: fn.trigger_type === 'schedule' ? fn.trigger_value : '0 4 * * *', saving: false }); setActiveMenu(null); }} className="w-full px-5 py-3 text-left text-[13px] font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-4 transition-all hover:translate-x-1">
-                                                                <div className="p-1.5 bg-orange-50 rounded-lg"><Clock className="h-4 w-4 text-orange-600" /></div>
-                                                                Schedule Task
-                                                            </button>
+                                                            {fn.trigger_type === 'schedule' && (
+                                                                <button onClick={() => { setScheduleModal({ open: true, name: fn.name, cron: fn.trigger_value || '0 4 * * *', saving: false }); setActiveMenu(null); }} className="w-full px-5 py-3 text-left text-[13px] font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-4 transition-all hover:translate-x-1">
+                                                                    <div className="p-1.5 bg-orange-50 rounded-lg"><Clock className="h-4 w-4 text-orange-600" /></div>
+                                                                    Schedule Task
+                                                                </button>
+                                                            )}
                                                             <div className="h-px bg-gray-50 my-2 mx-3"></div>
                                                             <button
                                                                 onClick={() => {
