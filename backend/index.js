@@ -840,10 +840,18 @@ app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
             return res.status(404).send(renderHostingError('Content Missing', 'The deployment assets for this site could not be found.', 'DEPLOYMENT_FILES_NOT_DISCOVERED'));
         }
 
-        express.static(sitePath)(req, res, next);
+        // Serve static files, but if not found, show branded 404
+        express.static(sitePath)(req, res, () => {
+            res.status(404).send(renderHostingError('404: Not Found', 'The specific page or resource you are looking for does not exist on this site.', 'FILE_NOT_FOUND_IN_SITE'));
+        });
     } catch (e) {
         res.status(500).send('Internal Server Error');
     }
+});
+
+// Catch invalid/short hosting URLs (e.g., /site, /site/15, etc.)
+app.all(['/site', '/site/*'], (req, res) => {
+    res.status(400).send(renderHostingError('Invalid URL', 'The hosting link is incomplete. Please use the full URL provided in your dashboard.', 'URL_STRUCTURE_INVALID'));
 });
 
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
