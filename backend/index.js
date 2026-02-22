@@ -107,6 +107,7 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_client_id VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha1_fingerprint VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha256_fingerprint VARCHAR(255);`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
             // User Reset Password Fields
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;`);
@@ -191,6 +192,13 @@ const activeCronJobs = new Map();
 
 const runScheduledFunction = async (projectId, funcName) => {
     try {
+        // Only run if Project is Active
+        const projCheck = await pool.query('SELECT is_active FROM projects WHERE id = $1', [projectId]);
+        if (projCheck.rows.length === 0 || !projCheck.rows[0].is_active) {
+            console.log(`[CRON ENGINE] ⏸️ Skipped ${funcName} (Project ${projectId} is inactive or deleted)`);
+            return;
+        }
+
         console.log(`[CRON ENGINE] 🚀 Triggering ${funcName} (Project ${projectId})`);
         await axios.post(`http://localhost:3005/run/${projectId}/${funcName}`, {}, {
             headers: { 'Content-Type': 'application/json' }
@@ -720,6 +728,19 @@ app.get('/v1/app/check-project/:id', async (req, res) => {
         res.json({ exists: true, active: active });
     } catch (e) {
         console.error(`🔥 Error checking project ${projectId}: `, e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Internal Route to get Project Activity Status for Cloud Functions Hub
+app.get('/v1/internal/projects/:projectId/status', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT is_active FROM projects WHERE id = $1', [req.params.projectId]);
+        if (result.rows.length === 0) {
+            return res.json({ exists: false, active: false });
+        }
+        return res.json({ exists: true, active: result.rows[0].is_active });
+    } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });

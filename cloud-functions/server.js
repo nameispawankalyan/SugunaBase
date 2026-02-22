@@ -105,9 +105,22 @@ app.post('/deploy-zip/:projectId/:name', authenticateToken, upload.single('proje
 // ==========================================
 // 3. RUN API (Executes the Function)
 // ==========================================
-app.all('/run/:projectId/:name', (req, res) => {
+app.all('/run/:projectId/:name', async (req, res) => {
     const projectId = req.params.projectId;
     const funcName = req.params.name;
+
+    // 0. CHECK IF PROJECT IS ACTIVE OR EXISTS
+    try {
+        const axios = require('axios');
+        const projCheck = await axios.get(`http://localhost:5000/v1/internal/projects/${projectId}/status`);
+        if (!projCheck.data.active) {
+            console.error(`[RUN] Denied execution for ${funcName} - Project ${projectId} is inactive or deleted.`);
+            return res.status(403).send({ error: "Project is inactive or deleted. Execution blocked." });
+        }
+    } catch (err) {
+        console.error(`[RUN] Failed to check project status:`, err.message);
+        return res.status(500).send({ error: "Internal Server Error during execution verification." });
+    }
 
     // Combine Body and Query params for full event support (GET or POST)
     const eventData = JSON.stringify({
