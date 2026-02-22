@@ -711,6 +711,50 @@ app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, async 
 
 
 
+// --- SUGUNA HOSTING SYSTEM ---
+const unzipper = require('unzipper');
+
+const hostingUpload = multer({ dest: 'hosting_temp/' });
+
+app.post('/v1/hosting/deploy/:projectId', authenticateToken, hostingUpload.single('hosting_files'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: "No zip file provided" });
+
+        const { projectId } = req.params;
+        const siteDir = path.join(__dirname, 'hosting_sites', projectId);
+
+        // 1. Create clean directory
+        if (fs.existsSync(siteDir)) {
+            fs.rmSync(siteDir, { recursive: true, force: true });
+        }
+        fs.mkdirSync(siteDir, { recursive: true });
+
+        // 2. Extract ZIP
+        await fs.createReadStream(req.file.path)
+            .pipe(unzipper.Extract({ path: siteDir }))
+            .promise();
+
+        // 3. Delete temporary zip
+        fs.unlinkSync(req.file.path);
+
+        const liveUrl = `https://api.suguna.co/site/${projectId}`; // Or project_${projectId}.suguna.co if DNS allowed.
+
+        res.json({ message: "Hosting Deploy Success", live_url: liveUrl });
+    } catch (e) {
+        console.error("Hosting Deploy Error:", e);
+        res.status(500).json({ error: "Hosting deployment failed" });
+    }
+});
+
+// Serve Hosted Sites dynamically
+app.use('/site/:projectId', (req, res, next) => {
+    const sitePath = path.join(__dirname, 'hosting_sites', req.params.projectId);
+    if (!fs.existsSync(sitePath)) {
+        return res.status(404).send('<h1>Suguna Hosting: Site not found</h1><p>The site for this project has not been deployed yet.</p>');
+    }
+    express.static(sitePath)(req, res, next);
+});
+
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
 
 // Check Project Status for App (Public Route)
