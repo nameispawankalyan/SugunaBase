@@ -64,7 +64,7 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
         return () => clearInterval(interval);
     }, [id]);
 
-    const apiKey = id;
+    const apiKey = projectDetails?.app_id || id;
     const apiSecret = projectDetails?.api_secret || 'Loading...';
 
     const copyToClipboard = (text: string, isSecret: boolean) => {

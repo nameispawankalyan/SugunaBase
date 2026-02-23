@@ -43,13 +43,14 @@ export class DatabaseService {
 
     /**
      * Fetches the real secret key for a specific App ID from PostgreSQL.
-     * This is fully dynamic based on the appId provided by the client.
+     * This is fully dynamic based on the app_id (Agoral-style) provided by the client.
      */
-    static async getAppSecret(appId: string): Promise<string | null> {
+    static async getAppSecret(appIdOrKey: string): Promise<string | null> {
         try {
+            // First try to find by our new secure app_id, then fallback to database id
             const result = await pool.query(
-                'SELECT api_secret FROM projects WHERE id = $1 OR package_name = $1',
-                [appId]
+                'SELECT api_secret FROM projects WHERE app_id = $1 OR id::text = $1 OR package_name = $1',
+                [appIdOrKey]
             );
 
             if (result.rows.length > 0) {
@@ -57,7 +58,7 @@ export class DatabaseService {
             }
             return null;
         } catch (err) {
-            console.error('[Database] Failed to fetch app secret for appId:', appId, err);
+            console.error('[Database] Failed to fetch app secret:', appIdOrKey, err);
             return null;
         }
     }
@@ -65,11 +66,11 @@ export class DatabaseService {
     /**
      * Checks if a project is active using real DB data.
      */
-    static async isProjectActive(appId: string): Promise<boolean> {
+    static async isProjectActive(appIdOrKey: string): Promise<boolean> {
         try {
             const result = await pool.query(
-                'SELECT is_active FROM projects WHERE id = $1 OR package_name = $1',
-                [appId]
+                'SELECT is_active FROM projects WHERE app_id = $1 OR id::text = $1 OR package_name = $1',
+                [appIdOrKey]
             );
             return result.rows.length > 0 && result.rows[0].is_active;
         } catch (err) {

@@ -109,12 +109,15 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha256_fingerprint VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS api_secret TEXT;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS app_id VARCHAR(50) UNIQUE;`);
 
-            // Backfill secrets for existing projects
-            const projects = await pool.query('SELECT id FROM projects WHERE api_secret IS NULL');
+            // Upgrade credentials for all projects
+            const projects = await pool.query('SELECT id FROM projects WHERE app_id IS NULL OR api_secret NOT LIKE \'%_%\'');
+            // The logic above: if no app_id OR if secret is simple (id-based with sk_prefix), regenerate.
             for (let row of projects.rows) {
-                const secret = `sk_live_${row.id}_${require('crypto').randomBytes(12).toString('hex')}`;
-                await pool.query('UPDATE projects SET api_secret = $1 WHERE id = $2', [secret, row.id]);
+                const appId = require('crypto').randomBytes(16).toString('hex'); // 32 chars
+                const apiSecret = require('crypto').randomBytes(16).toString('hex'); // 32 chars
+                await pool.query('UPDATE projects SET app_id = $1, api_secret = $2 WHERE id = $3', [appId, apiSecret, row.id]);
             }
             // User Reset Password Fields
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
@@ -977,16 +980,13 @@ app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
 app.post('/v1/projects', authenticateToken, async (req, res) => {
     const { name, platform, google_client_id } = req.body;
     try {
-        const tempSecret = `sk_live_tmp_${require('crypto').randomBytes(12).toString('hex')}`;
-        const result = await pool.query(
-            'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id, api_secret) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [name, platform, req.user.id, !!google_client_id, google_client_id, tempSecret]
-        );
+        const appId = require('crypto').randomBytes(16).toString('hex');
+        const apiSecret = require('crypto').randomBytes(16).toString('hex');
 
-        // Refine secret with real ID if needed (though tempSecret is fine)
-        const realSecret = `sk_live_${result.rows[0].id}_${require('crypto').randomBytes(12).toString('hex')}`;
-        await pool.query('UPDATE projects SET api_secret = $1 WHERE id = $2', [realSecret, result.rows[0].id]);
-        result.rows[0].api_secret = realSecret;
+        const result = await pool.query(
+            'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id, app_id, api_secret) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [name, platform, req.user.id, !!google_client_id, google_client_id, appId, apiSecret]
+        );
 
         io.to(req.user.id.toString()).emit("project_created", result.rows[0]);
         res.status(201).json(result.rows[0]);
