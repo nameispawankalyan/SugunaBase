@@ -23,6 +23,7 @@ export class SugunaCast {
     private producers: Map<string, any> = new Map();
     private consumers: Map<string, any> = new Map();
     private roomId: string;
+    private iceServers: any[] = [];
     public onTrack?: (track: MediaStreamTrack, peerId: string) => void;
     public onTrackEnded?: (peerId: string) => void;
 
@@ -56,12 +57,13 @@ export class SugunaCast {
                 roomId: this.roomId,
                 token: this.options.token,
                 metrics: this.options.metrics
-            }, async (data: { rtpCapabilities: any, producers: any[], error?: string }) => {
+            }, async (data: { rtpCapabilities: any, producers: any[], iceServers: any[], error?: string }) => {
                 if (data.error) {
                     reject(new Error(data.error));
                     return;
                 }
                 try {
+                    this.iceServers = data.iceServers || [];
                     await this.device.load({ routerRtpCapabilities: data.rtpCapabilities });
 
                     // Consume existing producers
@@ -100,8 +102,8 @@ export class SugunaCast {
                 const { params } = data;
 
                 const transport = direction === 'send'
-                    ? this.device.createSendTransport(params)
-                    : this.device.createRecvTransport(params);
+                    ? this.device.createSendTransport({ ...params, iceServers: this.iceServers })
+                    : this.device.createRecvTransport({ ...params, iceServers: this.iceServers });
 
                 transport.on('connect', ({ dtlsParameters }: any, callback: () => void, errback: (error: any) => void) => {
                     this.socket.emit('connectWebRtcTransport', {

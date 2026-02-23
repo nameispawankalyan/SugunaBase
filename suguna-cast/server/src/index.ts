@@ -122,7 +122,8 @@ const setupSocketHandlers = (io: SocketServer) => {
 
                 callback({
                     rtpCapabilities: room.router.rtpCapabilities,
-                    producers: room.getProducers()
+                    producers: room.getProducers(),
+                    iceServers: config.client.iceServers
                 });
 
             } catch (error: any) {

@@ -68,17 +68,20 @@ export const config = {
                     announcedIp: process.env.ANNOUNCED_IP || '10.219.241.101',
                 },
             ],
-            // STUN/TURN servers for Production
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                {
-                    urls: 'turn:your-turn-server.com:3478',
-                    username: 'user',
-                    credential: 'password'
-                }
-            ],
+            enableUdp: true,
+            enableTcp: true,
+            preferUdp: true,
             initialAvailableOutgoingBitrate: 1000000,
             maxSctpMessageSize: 262144,
         },
     },
+
+    // Client-side Configuration (Sent via signaling)
+    client: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            // TURN server should be added here
+        ] as any[]
+    }
 };
