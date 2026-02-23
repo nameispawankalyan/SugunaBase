@@ -1,0 +1,13 @@
+node_modules/
+.env
+dist/
+build/
+.next/
+*.log
+.DS_Store
+package-lock.json
+key.pem
+cert.pem
+logs/
+out/
+Release/
