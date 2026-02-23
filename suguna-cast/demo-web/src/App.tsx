@@ -21,8 +21,8 @@ function App() {
       console.log('Permissions granted');
       setLocalStream(stream);
 
-      // REAL PROJECT TOKEN (Generated using Project ID 15 and your Secret)
-      const projectToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjE1Iiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLTEyMyIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMTczMjN9.UZrI4aJnls17ThSbzXtj1U3Y2denPSBlH_1YVLrDk98";
+      // PROFESSIONAL PROJECT TOKEN (Generated using 32-char App ID and Secret)
+      const projectToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6ImQ1MGQyNDI4ZGFiNThjNWVkOGM5NzM0NmE3N2NjNjNhIiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLXByb2Zlc3Npb25hbCIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMTk3OTV9.XrW8MAU6soRRptH6px6LhXnUD1Prh8sOC5qzFspQIuw";
 
       const castInstance = new SugunaCast({
         serverUrl: 'https://cast.suguna.co',
