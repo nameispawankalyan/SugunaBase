@@ -21,15 +21,13 @@ function App() {
       console.log('Permissions granted');
       setLocalStream(stream);
 
-      console.log('Connecting to production server: https://cast.suguna.co');
-
-      // MOCK TOKEN (In real app, this comes from your backend)
-      const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6InN1Z3VuYS1wcm9qZWN0LTEiLCJyb29tSWQiOiJkZW1vLXJvb20iLCJ1aWQiOiJ1c2VyLTEyMyIsInJvbGUiOiJob3N0In0.your-signature-here";
+      // REAL PROJECT TOKEN (Generated using Project ID 15 and your Secret)
+      const projectToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjE1Iiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLTEyMyIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMTczMjN9.UZrI4aJnls17ThSbzXtj1U3Y2denPSBlH_1YVLrDk98";
 
       const castInstance = new SugunaCast({
         serverUrl: 'https://cast.suguna.co',
         roomId: roomId,
-        token: mockToken,
+        token: projectToken,
         metrics: {
           name: "Tester 5G", // Helping verify network analytics
           uid: "user-" + Math.random().toString(36).substr(2, 9),

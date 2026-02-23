@@ -81,7 +81,7 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
                 <div className="bg-blue-50 p-6 rounded-full mb-6 ring-8 ring-blue-50/50">
                     <PhoneCall className="h-16 w-16 text-blue-600 animate-bounce" />
                 </div>
-                <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Enable Suguna Calling</h1>
+                <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Enable Suguna Cast</h1>
                 <p className="text-gray-500 max-w-md mb-8 leading-relaxed">
                     Power your application with high-quality, ultra-low latency voice and video calls.
                     Built on top of Suguna's Global Infrastructure.
@@ -109,7 +109,7 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
                             <PhoneCall className="h-8 w-8 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Suguna Calling</h1>
+                            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Suguna Cast</h1>
                             <div className="flex items-center gap-2 mt-1">
                                 <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
                                 <span className="text-xs font-bold text-green-600 uppercase tracking-widest">Service Active</span>
@@ -319,7 +319,7 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
                         <div className="relative z-10 max-w-lg">
                             <h3 className="text-2xl font-black mb-2">Integration Guide</h3>
                             <p className="text-blue-100 font-bold text-sm mb-6 leading-relaxed">
-                                Ready to build? Follow our step-by-step guides to integrate Suguna Calling SDK into your Android, iOS, or Web application.
+                                Ready to build? Follow our step-by-step guides to integrate Suguna Cast SDK into your Android, iOS, or Web application.
                             </p>
                             <div className="flex flex-wrap gap-3">
                                 <a href="/docs/android" className="px-5 py-2.5 bg-white text-blue-700 rounded-xl text-xs font-black shadow-lg hover:bg-blue-50 transition-colors">Android SDK Docs</a>

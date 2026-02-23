@@ -32,7 +32,8 @@ export class DatabaseService {
     static async getAppSecret(appId: string): Promise<string | null> {
         // In production: return (await db.collection('apps').doc(appId).get()).data().secret
         const mockDb: Record<string, string> = {
-            "suguna-project-1": "suguna_cast_secret_key_2024"
+            "suguna-project-1": "suguna_cast_secret_key_2024",
+            "15": "sk_live_15_51suguna"
         };
         return mockDb[appId] || null;
     }
