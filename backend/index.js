@@ -111,9 +111,8 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS api_secret TEXT;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS app_id VARCHAR(50) UNIQUE;`);
 
-            // Upgrade credentials for all projects
-            const projects = await pool.query('SELECT id FROM projects WHERE app_id IS NULL OR api_secret NOT LIKE \'%_%\'');
-            // The logic above: if no app_id OR if secret is simple (id-based with sk_prefix), regenerate.
+            // Upgrade credentials for all projects (only if they lack a secure App ID)
+            const projects = await pool.query('SELECT id FROM projects WHERE app_id IS NULL');
             for (let row of projects.rows) {
                 const appId = require('crypto').randomBytes(16).toString('hex'); // 32 chars
                 const apiSecret = require('crypto').randomBytes(16).toString('hex'); // 32 chars
