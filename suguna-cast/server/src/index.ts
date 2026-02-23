@@ -1,5 +1,6 @@
 import express from 'express';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { generate } from 'selfsigned';
@@ -256,7 +257,7 @@ const startServer = async () => {
         // In Production, Nginx handles SSL at https://cast.suguna.co
         // The app runs as HTTP internally on Port 3100 for better performance.
         console.log('Production mode: Starting HTTP server for Nginx proxy...');
-        server = require('http').createServer(app);
+        server = http.createServer(app);
     } else {
         // Local Development: Use self-signed HTTPS
         let options: any;
