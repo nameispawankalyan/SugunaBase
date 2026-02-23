@@ -249,31 +249,42 @@ const setupSocketHandlers = (io: SocketServer) => {
 const startServer = async () => {
     await createWorkers();
 
-    // Generate or Load Certs
-    let options: any;
-    const keyPath = config.ssl.key;
-    const certPath = config.ssl.cert;
+    let server: any;
+    const isProd = config.isProduction || process.env.PORT === '3100';
 
-    if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-        console.log(`Using existing SSL certificates from: ${keyPath}`);
-        options = {
-            key: fs.readFileSync(keyPath),
-            cert: fs.readFileSync(certPath)
-        };
+    if (isProd) {
+        // In Production, Nginx handles SSL at https://cast.suguna.co
+        // The app runs as HTTP internally on Port 3100 for better performance.
+        console.log('Production mode: Starting HTTP server for Nginx proxy...');
+        server = require('http').createServer(app);
     } else {
-        console.log('SSL Certificates not found. Generating self-signed for development...');
-        const attrs = [{ name: 'commonName', value: process.env.ANNOUNCED_IP || '10.219.241.101' }];
-        // @ts-ignore
-        const pems: any = await generate(attrs, { dataDays: 365 });
-        fs.writeFileSync(keyPath, pems.private);
-        fs.writeFileSync(certPath, pems.cert);
-        options = {
-            key: pems.private,
-            cert: pems.cert
-        };
+        // Local Development: Use self-signed HTTPS
+        let options: any;
+        const keyPath = config.ssl.key;
+        const certPath = config.ssl.cert;
+
+        if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+            console.log(`Using existing SSL certificates from: ${keyPath}`);
+            options = {
+                key: fs.readFileSync(keyPath),
+                cert: fs.readFileSync(certPath)
+            };
+        } else {
+            console.log('SSL Certificates not found. Generating self-signed for development...');
+            const attrs = [{ name: 'commonName', value: process.env.ANNOUNCED_IP || '10.219.241.101' }];
+            // @ts-ignore
+            const pems: any = await generate(attrs, { dataDays: 365 });
+            fs.writeFileSync(keyPath, pems.private);
+            fs.writeFileSync(certPath, pems.cert);
+            options = {
+                key: pems.private,
+                cert: pems.cert
+            };
+        }
+        server = https.createServer(options, app);
+        console.log('Development mode: Starting HTTPS server with self-signed certs...');
     }
 
-    const server = https.createServer(options, app);
     const io = new SocketServer(server, {
         cors: {
             origin: '*',
