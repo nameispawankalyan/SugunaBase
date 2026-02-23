@@ -65,3 +65,18 @@ export const api = {
         }
     }
 };
+
+export const CAST_API_URL = 'https://cast.suguna.co';
+
+export const castApi = {
+    get: async (endpoint: string) => {
+        try {
+            const res = await fetch(`${CAST_API_URL}${endpoint}`);
+            if (!res.ok) throw new Error(`Cast API Error: ${res.statusText}`);
+            return await res.json();
+        } catch (error) {
+            console.error("Cast API Error:", error);
+            throw error;
+        }
+    }
+};

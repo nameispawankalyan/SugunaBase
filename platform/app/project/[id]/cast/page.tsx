@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, use, useEffect } from 'react';
+import { api, castApi } from '@/utils/api';
 import {
     PhoneCall, Key, ShieldCheck, Eye, EyeOff, RefreshCw, Copy, Check,
     Video, Mic, Activity, Users, Clock, Globe, Signal, Zap, History,
@@ -12,34 +13,56 @@ type TabType = 'dashboard' | 'credentials';
 export default function SugunaCastPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-    const [isEnabled, setIsEnabled] = useState(false);
+    const [isEnabled, setIsEnabled] = useState(true); // Default to true for demo
+    const [loading, setLoading] = useState(true);
 
     // Auth State
     const [showSecret, setShowSecret] = useState(false);
     const [copiedKey, setCopiedKey] = useState(false);
     const [copiedSecret, setCopiedSecret] = useState(false);
 
-    // Mock Data for Dashboard
-    const [stats] = useState({
-        totalCalls: 128,
-        totalMinutes: 2450,
-        activeParticipants: 4,
-        successRate: '99.8%'
+    // Real Data State
+    const [stats, setStats] = useState({
+        totalCalls: 0,
+        totalMinutes: 0,
+        activeParticipants: 0,
+        successRate: '100%'
     });
 
-    const [liveRooms] = useState([
-        { id: 'room-abc-123', type: 'Video Call', status: 'LIVE', participants: 2, startTime: '10 mins ago' },
-        { id: 'stream-xyz-789', type: 'Live Stream', status: 'LIVE', participants: 156, startTime: '45 mins ago' }
-    ]);
+    const [liveRooms, setLiveRooms] = useState<any[]>([]);
+    const [callHistory, setCallHistory] = useState<any[]>([]);
 
-    const [callHistory] = useState([
-        { id: 'h-1', user: 'user-raj3d', type: 'Video', duration: '25m 12s', network: '5G', location: 'Hyderabad, TS', time: '2h ago' },
-        { id: 'h-2', user: 'user-pav45', type: 'Audio', duration: '12m 05s', network: 'WiFi', location: 'Vizag, AP', time: '5h ago' },
-        { id: 'h-3', user: 'user-sug99', type: 'Video', duration: '45m 30s', network: '4G', location: 'Bangalore, KA', time: 'Yesterday' },
-    ]);
+    const fetchData = async () => {
+        try {
+            const [statsRes, roomsRes, historyRes] = await Promise.all([
+                castApi.get(`/api/stats/${id}`),
+                castApi.get(`/api/rooms/${id}`),
+                castApi.get(`/api/history/${id}`)
+            ]);
 
-    const apiKey = `sg_live_${id}_kIy7z${Math.random().toString(36).substr(2, 10)}`;
-    const apiSecret = `sk_live_${id}_98f2a${Math.random().toString(36).substr(2, 20)}`;
+            setStats({
+                totalCalls: statsRes.totalCalls,
+                totalMinutes: statsRes.totalCalls * 12, // Estimated
+                activeParticipants: statsRes.activeParticipants,
+                successRate: statsRes.successRate
+            });
+            setLiveRooms(roomsRes);
+            setCallHistory(historyRes);
+        } catch (error) {
+            console.error('Failed to fetch cast data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+        const interval = setInterval(fetchData, 5000); // Pulse every 5s
+        return () => clearInterval(interval);
+    }, [id]);
+
+    const apiKey = id; // Project ID is our current App ID
+    const apiSecret = `sk_live_${id}_${id.split('').reverse().join('')}suguna`;
 
     const copyToClipboard = (text: string, isSecret: boolean) => {
         navigator.clipboard.writeText(text);
@@ -155,19 +178,19 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
                                     </thead>
                                     <tbody className="divide-y divide-gray-50 text-sm">
                                         {liveRooms.map((room) => (
-                                            <tr key={room.id} className="hover:bg-gray-50/50 transition-colors group">
-                                                <td className="px-6 py-4 font-mono text-blue-600 font-bold">{room.id}</td>
+                                            <tr key={room.roomId} className="hover:bg-gray-50/50 transition-colors group">
+                                                <td className="px-6 py-4 font-mono text-blue-600 font-bold">{room.roomId}</td>
                                                 <td className="px-6 py-4">
                                                     <span className="flex items-center gap-2 font-semibold text-gray-700">
-                                                        {room.type === 'Video Call' ? <Video className="h-4 w-4 text-gray-400" /> : <Mic className="h-4 w-4 text-gray-400" />}
+                                                        {room.type?.includes('video') ? <Video className="h-4 w-4 text-gray-400" /> : <Mic className="h-4 w-4 text-gray-400" />}
                                                         {room.type}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 font-bold text-gray-900">{room.participants}</td>
+                                                <td className="px-6 py-4 font-bold text-gray-900">{room.participantCount}</td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-full border border-green-100 ring-4 ring-green-50/50">
                                                         <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                                        LIVE
+                                                        {room.status}
                                                     </span>
                                                 </td>
                                             </tr>
