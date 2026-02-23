@@ -293,6 +293,8 @@ const startServer = async () => {
         }
     });
 
+    console.log(`[MediaSoup] Announced IP: ${config.mediasoup.webRtcTransport.listenIps[0].announcedIp}`);
+
     setupSocketHandlers(io);
 
     server.listen(config.http.port, () => {

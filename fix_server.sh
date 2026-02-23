@@ -39,11 +39,16 @@ pm2 start server.js --name "suguna-functions-hub"
 # 3.6 Start Suguna Cast Media Server (Port 3100)
 echo "🚀 Starting Suguna Cast Media Server on Port 3100..."
 cd ~/SugunaBase/suguna-cast/server
+# Force clean install for mediasoup binaries
+rm -rf node_modules package-lock.json
 npm install
 npm run build
+# Detect Public IP for MediaSoup
+PUBLIC_IP=$(curl -s https://ifconfig.me)
+echo "🌐 Detected Public IP: $PUBLIC_IP"
 # Open Firewall for MediaSoup UDP ports
 sudo ufw allow 40000:49999/udp || true
-PORT=3100 pm2 start dist/index.js --name "suguna-cast"
+NODE_ENV=production ANNOUNCED_IP=$PUBLIC_IP PORT=3100 pm2 start dist/index.js --name "suguna-cast"
 
 # 4. Save PM2 list so they restart on reboot
 pm2 save
