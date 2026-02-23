@@ -1,3 +1,5 @@
+import { Pool } from 'pg';
+
 export interface CallRecord {
     roomId: string;
     appId: string;
@@ -8,41 +10,70 @@ export interface CallRecord {
     participants: any[];
 }
 
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
+});
+
 export class DatabaseService {
     /**
-     * In a production environment, this method would connect to SugunaBase Firestore 
-     * or a SQL database to store the call records permanently.
+     * Stores the call record in the central database.
      */
     static async saveCallRecord(record: CallRecord): Promise<void> {
-        console.log(`[Database] Saving record for ${record.roomId} to SugunaBase...`);
+        console.log(`[Database] Persisting call record for ${record.roomId}...`);
 
-        // Simulating DB write delay
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                // Here you would do: db.collection('calls').add(record)
-                console.log(`[Database] Record saved successfully ID: ${record.roomId}`);
-                resolve();
-            }, 500);
-        });
+        try {
+            await pool.query(
+                `INSERT INTO cast_calls (room_id, app_id, type, start_time, end_time, duration, participants)
+                 VALUES ($1, $2, $3, to_timestamp($4/1000.0), to_timestamp($5/1000.0), $6, $7)`,
+                [
+                    record.roomId,
+                    record.appId,
+                    record.type,
+                    record.startTime,
+                    record.endTime,
+                    record.duration,
+                    JSON.stringify(record.participants)
+                ]
+            );
+            console.log(`[Database] Call record saved successfully for room: ${record.roomId}`);
+        } catch (err) {
+            console.error('[Database] Error saving call record:', err);
+        }
     }
 
     /**
-     * Fetches the secret key for a specific App ID to verify tokens.
+     * Fetches the real secret key for a specific App ID from PostgreSQL.
      */
     static async getAppSecret(appId: string): Promise<string | null> {
-        // In production: return (await db.collection('apps').doc(appId).get()).data().secret
-        const mockDb: Record<string, string> = {
-            "suguna-project-1": "suguna_cast_secret_key_2024",
-            "15": "sk_live_15_51suguna"
-        };
-        return mockDb[appId] || null;
+        try {
+            // Check if appId is numeric (ID) or just string
+            const result = await pool.query(
+                'SELECT api_secret FROM projects WHERE id = $1 OR package_name = $1',
+                [appId]
+            );
+
+            if (result.rows.length > 0) {
+                return result.rows[0].api_secret;
+            }
+            return null;
+        } catch (err) {
+            console.error('[Database] Failed to fetch app secret:', err);
+            return null;
+        }
     }
 
     /**
-     * Checks if a project is active and allowed to use Suguna Cast.
+     * Checks if a project is active using real DB data.
      */
     static async isProjectActive(appId: string): Promise<boolean> {
-        // In production: check subscription status
-        return true;
+        try {
+            const result = await pool.query(
+                'SELECT is_active FROM projects WHERE id = $1 OR package_name = $1',
+                [appId]
+            );
+            return result.rows.length > 0 && result.rows[0].is_active;
+        } catch (err) {
+            return false;
+        }
     }
 }

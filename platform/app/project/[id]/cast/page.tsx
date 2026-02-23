@@ -31,13 +31,15 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
 
     const [liveRooms, setLiveRooms] = useState<any[]>([]);
     const [callHistory, setCallHistory] = useState<any[]>([]);
+    const [projectDetails, setProjectDetails] = useState<any>(null);
 
     const fetchData = async () => {
         try {
-            const [statsRes, roomsRes, historyRes] = await Promise.all([
+            const [statsRes, roomsRes, historyRes, projectRes] = await Promise.all([
                 castApi.get(`/api/stats/${id}`),
                 castApi.get(`/api/rooms/${id}`),
-                castApi.get(`/api/history/${id}`)
+                castApi.get(`/api/history/${id}`),
+                api.get(`/projects/${id}`)
             ]);
 
             setStats({
@@ -48,6 +50,7 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
             });
             setLiveRooms(roomsRes);
             setCallHistory(historyRes);
+            setProjectDetails(projectRes);
         } catch (error) {
             console.error('Failed to fetch cast data:', error);
         } finally {
@@ -61,8 +64,8 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
         return () => clearInterval(interval);
     }, [id]);
 
-    const apiKey = id; // Project ID is our current App ID
-    const apiSecret = `sk_live_${id}_${id.split('').reverse().join('')}suguna`;
+    const apiKey = id;
+    const apiSecret = projectDetails?.api_secret || 'Loading...';
 
     const copyToClipboard = (text: string, isSecret: boolean) => {
         navigator.clipboard.writeText(text);

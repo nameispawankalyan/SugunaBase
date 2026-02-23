@@ -108,6 +108,14 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha1_fingerprint VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha256_fingerprint VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS api_secret TEXT;`);
+
+            // Backfill secrets for existing projects
+            const projects = await pool.query('SELECT id FROM projects WHERE api_secret IS NULL');
+            for (let row of projects.rows) {
+                const secret = `sk_live_${row.id}_${require('crypto').randomBytes(12).toString('hex')}`;
+                await pool.query('UPDATE projects SET api_secret = $1 WHERE id = $2', [secret, row.id]);
+            }
             // User Reset Password Fields
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;`);
@@ -195,7 +203,21 @@ const initDB = async () => {
             await pool.query('ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS trigger_value TEXT;');
         } catch (e) { }
 
-        console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions & Logs)");
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS cast_calls (
+                id SERIAL PRIMARY KEY,
+                room_id VARCHAR(255) NOT NULL,
+                app_id VARCHAR(255) NOT NULL,
+                type VARCHAR(50) DEFAULT 'video_call',
+                start_time TIMESTAMP,
+                end_time TIMESTAMP,
+                duration INTEGER,
+                participants JSONB DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs & Cast)");
         initSchedules(); // Start the Cron Engine
     } catch (err) {
         console.error("❌ DB Init Error:", err);
@@ -953,12 +975,19 @@ app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
 
 // Create Project
 app.post('/v1/projects', authenticateToken, async (req, res) => {
-    const { name, platform, google_client_id } = req.body; // Accept google_client_id
+    const { name, platform, google_client_id } = req.body;
     try {
+        const tempSecret = `sk_live_tmp_${require('crypto').randomBytes(12).toString('hex')}`;
         const result = await pool.query(
-            'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [name, platform, req.user.id, !!google_client_id, google_client_id] // Enable if ID provided
+            'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id, api_secret) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [name, platform, req.user.id, !!google_client_id, google_client_id, tempSecret]
         );
+
+        // Refine secret with real ID if needed (though tempSecret is fine)
+        const realSecret = `sk_live_${result.rows[0].id}_${require('crypto').randomBytes(12).toString('hex')}`;
+        await pool.query('UPDATE projects SET api_secret = $1 WHERE id = $2', [realSecret, result.rows[0].id]);
+        result.rows[0].api_secret = realSecret;
+
         io.to(req.user.id.toString()).emit("project_created", result.rows[0]);
         res.status(201).json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
