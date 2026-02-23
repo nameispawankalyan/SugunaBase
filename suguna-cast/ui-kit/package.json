@@ -1,0 +1,20 @@
+{
+    "name": "@sugunabase/cast-ui-kit",
+    "version": "1.0.0",
+    "description": "Ready-made UI components for Suguna Cast",
+    "main": "dist/index.js",
+    "peerDependencies": {
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
+    },
+    "dependencies": {
+        "clsx": "^2.0.0",
+        "lucide-react": "^0.263.1",
+        "tailwind-merge": "^1.14.0"
+    },
+    "devDependencies": {
+        "@types/react": "^18.3.28",
+        "@types/react-dom": "^18.3.7",
+        "typescript": "^5.1.6"
+    }
+}

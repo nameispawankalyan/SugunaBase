@@ -130,7 +130,7 @@ const Sidebar = () => {
             <NavItem href={`/project/${projectId}/storage`} icon={HardDrive} label="Storage" pathname={pathname} />
             <NavItem href={`/project/${projectId}/hosting`} icon={Globe} label="Hosting" pathname={pathname} />
             <NavItem href={`/project/${projectId}/functions`} icon={FileCode} label="Functions" pathname={pathname} />
-            <NavItem href={`/project/${projectId}/calling`} icon={PhoneCall} label="Suguna Calling" pathname={pathname} />
+            <NavItem href={`/project/${projectId}/cast`} icon={PhoneCall} label="Suguna Cast" pathname={pathname} />
           </nav>
         </div>
 

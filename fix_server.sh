@@ -34,8 +34,16 @@ PORT=3000 pm2 start "npm run start" --name "suguna-console"
 echo "🚀 Starting Cloud Functions Hub on Port 3005..."
 cd ~/SugunaBase/cloud-functions
 npm install
-# Ensure Docker daemon is running on VPS
 pm2 start server.js --name "suguna-functions-hub"
+
+# 3.6 Start Suguna Cast Media Server (Port 3100)
+echo "🚀 Starting Suguna Cast Media Server on Port 3100..."
+cd ~/SugunaBase/suguna-cast/server
+npm install
+npm run build
+# Open Firewall for MediaSoup UDP ports
+sudo ufw allow 40000:49999/udp || true
+PORT=3100 pm2 start dist/index.js --name "suguna-cast"
 
 # 4. Save PM2 list so they restart on reboot
 pm2 save
@@ -43,20 +51,11 @@ pm2 save
 # 5. Reset Nginx Configuration
 echo "⚙️ Configuring Nginx (Unified Robust Config)..."
 sudo tee /etc/nginx/sites-available/suguna > /dev/null <<EOT
-# 1. API Subdomain (Highest Priority)
+# 1. API Subdomain
 server {
     listen 80;
     server_name api.suguna.co;
     client_max_body_size 100M;
-
-    location ^~ /functions/ {
-        proxy_pass http://127.0.0.1:3005/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-    }
 
     location / {
         proxy_pass http://127.0.0.1:5000;
@@ -68,7 +67,23 @@ server {
     }
 }
 
-# 2. Main Site and Console
+# 2. Cast Subdomain (Media Server)
+server {
+    listen 80;
+    server_name cast.suguna.co;
+    
+    location / {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    }
+}
+
+# 3. Main Site and Console
 server {
     listen 80;
     server_name suguna.co www.suguna.co console.suguna.co;
@@ -105,12 +120,11 @@ if [ $? -eq 0 ]; then
     
     # 7. Re-apply SSL Certificates (Auto-Refreshes HTTPS settings)
     echo "🔒 Applying SSL..."
-    sudo certbot --nginx -d suguna.co -d www.suguna.co -d api.suguna.co --non-interactive --agree-tos -m admin@suguna.co --redirect
+    sudo certbot --nginx -d suguna.co -d www.suguna.co -d api.suguna.co -d cast.suguna.co --non-interactive --agree-tos -m admin@suguna.co --redirect
 else
     echo "❌ Nginx Configuration Failed"
     exit 1
 fi
 
-echo "✅ All Done! Website should be working perfectly now."
-echo "👉 Visit: https://suguna.co/project/15/auth"
+echo "✅ All Done! Suguna Cast is live on https://cast.suguna.co"
 exit 0
