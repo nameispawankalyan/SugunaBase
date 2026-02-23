@@ -22,7 +22,7 @@ function App() {
       setLocalStream(stream);
 
       // PROFESSIONAL PROJECT TOKEN (Freshly Generated for Fix)
-      const projectToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6ImQ1MGQyNDJiZGFiNThjNWVkOGM5NzM0NmE3N2NjNjNhIiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLXByb2Zlc3Npb25hbCIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMjE0Njl9.3haOfVMCMWhU-jeUrQMK7R_68CZ19JvxDtf6w9Ir1Lg";
+      const projectToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6ImQ1MGQyNDJiZGFiNThjNWVkOGM5NzM0NmE3N2NjNjNhIiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLXByb2Zlc3Npb25hbCIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMjIyNzl9.VNhbsONDXD7VgjyPSlPRDOHGbU_RAhmSZJG06dsiwW4";
 
       const castInstance = new SugunaCast({
         serverUrl: 'https://cast.suguna.co',

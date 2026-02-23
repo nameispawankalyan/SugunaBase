@@ -41,24 +41,30 @@ export class DatabaseService {
         }
     }
 
-    /**
-     * Fetches the real secret key for a specific App ID from PostgreSQL.
-     * This is fully dynamic based on the app_id (Agoral-style) provided by the client.
-     */
     static async getAppSecret(appIdOrKey: string): Promise<string | null> {
         try {
-            // First try to find by our new secure app_id, then fallback to database id
+            // Precise query for credentials
             const result = await pool.query(
-                'SELECT api_secret FROM projects WHERE app_id = $1 OR id::text = $1 OR package_name = $1',
+                `SELECT api_secret, id, app_id FROM projects 
+                 WHERE app_id = $1 OR id::text = $1 OR package_name = $1 
+                 LIMIT 1`,
                 [appIdOrKey]
             );
 
             if (result.rows.length > 0) {
-                return result.rows[0].api_secret;
+                const project = result.rows[0];
+                console.log(`[Database] Found project match (DB_ID: ${project.id}, AppID: ${project.app_id})`);
+                if (!project.api_secret) {
+                    console.error(`[Database] Project found but api_secret is NULL/EMPTY for DB_ID: ${project.id}`);
+                    return null;
+                }
+                return project.api_secret.trim(); // Trim to prevent whitespace signature issues
             }
+
+            console.warn(`[Database] No project found matching: ${appIdOrKey}`);
             return null;
         } catch (err) {
-            console.error('[Database] Failed to fetch app secret:', appIdOrKey, err);
+            console.error('[Database] Query failed:', appIdOrKey, err);
             return null;
         }
     }
