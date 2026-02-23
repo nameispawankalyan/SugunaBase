@@ -30,10 +30,20 @@ export class TokenService {
 
             // 2. Get secret from SugunaBase DB
             const secret = await DatabaseService.getAppSecret(decoded.appId);
-            if (!secret) throw new Error('App not found or inactive');
+            if (!secret) {
+                console.warn(`[Auth] No secret found for appId: ${decoded.appId}`);
+                throw new Error('App not found or inactive');
+            }
+
+            console.log(`[Auth] Verifying token for AppId: ${decoded.appId} (Secret length: ${secret.length})`);
 
             // 3. Verify with real secret
-            return jwt.verify(token, secret) as CastTokenPayload;
+            try {
+                return jwt.verify(token, secret) as CastTokenPayload;
+            } catch (err) {
+                console.error(`[Auth] Signature verification failed for ${decoded.appId}. Secret starts with: ${secret.substring(0, 4)}...`);
+                throw err;
+            }
         } catch (error) {
             throw new Error('Authentication Failed: ' + (error as Error).message);
         }
