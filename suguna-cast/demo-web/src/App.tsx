@@ -21,8 +21,8 @@ function App() {
       console.log('Permissions granted');
       setLocalStream(stream);
 
-      // PROFESSIONAL PROJECT TOKEN (Freshly Generated for Fix)
-      const projectToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6ImQ1MGQyNDJiZGFiNThjNWVkOGM5NzM0NmE3N2NjNjNhIiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLXByb2Zlc3Npb25hbCIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMjIyNzl9.VNhbsONDXD7VgjyPSlPRDOHGbU_RAhmSZJG06dsiwW4";
+      // FINAL VERIFIED TOKEN (Sourced directly from Server Repair Tool)
+      const projectToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6ImQ1MGQyNDJiZGFiNThjNWVkOGM5NzM0NmE3N2NjNjNhIiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLXByb2Zlc3Npb25hbCIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMjA0ODl9.QATYViEbJiO5TANVJOcd0g9ekgeS84cIUPZicZbj9Xg";
 
       const castInstance = new SugunaCast({
         serverUrl: 'https://cast.suguna.co',
