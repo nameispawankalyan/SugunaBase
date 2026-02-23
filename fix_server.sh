@@ -120,7 +120,7 @@ if [ $? -eq 0 ]; then
     
     # 7. Re-apply SSL Certificates (Auto-Refreshes HTTPS settings)
     echo "🔒 Applying SSL..."
-    sudo certbot --nginx -d suguna.co -d www.suguna.co -d api.suguna.co -d cast.suguna.co --non-interactive --agree-tos -m admin@suguna.co --redirect
+    sudo certbot --nginx -d suguna.co -d www.suguna.co -d api.suguna.co -d cast.suguna.co --expand --non-interactive --agree-tos -m admin@suguna.co --redirect
 else
     echo "❌ Nginx Configuration Failed"
     exit 1
