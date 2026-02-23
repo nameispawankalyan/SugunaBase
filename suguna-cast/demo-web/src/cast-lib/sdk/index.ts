@@ -24,6 +24,7 @@ export class SugunaCast {
     private consumers: Map<string, any> = new Map();
     private roomId: string;
     private iceServers: any[] = [];
+    private transportInProgress: { [key: string]: Promise<any> | null } = { send: null, recv: null };
     public onTrack?: (track: MediaStreamTrack, peerId: string) => void;
     public onTrackEnded?: (peerId: string) => void;
 
@@ -83,7 +84,11 @@ export class SugunaCast {
 
     async produce(track: MediaStreamTrack) {
         if (!this.sendTransport) {
-            this.sendTransport = await this.createTransport('send');
+            if (!this.transportInProgress.send) {
+                this.transportInProgress.send = this.createTransport('send');
+            }
+            this.sendTransport = await this.transportInProgress.send;
+            this.transportInProgress.send = null;
         }
 
         const producer = await this.sendTransport.produce({ track });
@@ -136,8 +141,13 @@ export class SugunaCast {
     }
 
     private async consume(producerId: string) {
+        console.log(`[SDK] Consuming producer: ${producerId}`);
         if (!this.recvTransport) {
-            this.recvTransport = await this.createTransport('recv');
+            if (!this.transportInProgress.recv) {
+                this.transportInProgress.recv = this.createTransport('recv');
+            }
+            this.recvTransport = await this.transportInProgress.recv;
+            this.transportInProgress.recv = null;
         }
 
         this.socket.emit('consume', {

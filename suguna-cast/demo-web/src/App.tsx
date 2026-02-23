@@ -50,7 +50,8 @@ function App() {
           const next = new Map(prev);
           const stream = next.get(peerId) || new MediaStream();
           stream.addTrack(track);
-          next.set(peerId, stream);
+          // Create a new MediaStream instance to force React re-render
+          next.set(peerId, new MediaStream(stream.getTracks()));
           return next;
         });
       };

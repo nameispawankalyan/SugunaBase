@@ -174,8 +174,8 @@ const setupSocketHandlers = (io: SocketServer) => {
                 const producer = await transport.produce({ kind, rtpParameters });
                 peer?.producers.set(producer.id, producer);
 
-                // Notify others about new producer
-                room?.broadcast(socket.id, 'newProducer', { producerId: producer.id }, io);
+                // Notify others in the room about new producer
+                socket.to(roomId).emit('newProducer', { producerId: producer.id });
 
                 callback({ id: producer.id });
             }
