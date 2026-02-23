@@ -5,29 +5,44 @@ const pool = new Pool({
     connectionString: 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
 });
 
-const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6ImQ1MGQyNDJiZGFiNThjNWVkOGM5NzM0NmE3N2NjNjNhIiwicm9vbUlkIjoiZGVtby1yb29tIiwidWlkIjoidGVzdGVyLXByb2Zlc3Npb25hbCIsInJvbGUiOiJob3N0IiwidHlwZSI6InZpZGVvX2NhbGwiLCJpYXQiOjE3NDAzMjIyNzl9.VNhbsONDXD7VgjyPSlPRDOHGbU_RAhmSZJG06dsiwW4";
-
-async function verify() {
+async function repair() {
     try {
-        const decoded = jwt.decode(token);
-        console.log('Decoded AppID:', decoded.appId);
+        console.log('🔍 Fetching credentials for Project 15...');
+        const res = await pool.query('SELECT app_id, api_secret FROM projects WHERE id = 15');
 
-        const res = await pool.query('SELECT api_secret FROM projects WHERE app_id = $1', [decoded.appId]);
         if (res.rows.length === 0) {
-            console.error('Project not found in DB!');
+            console.error('❌ Project 15 not found in database!');
             return;
         }
 
-        const secret = res.rows[0].api_secret;
-        console.log('Found Secret in DB (first 4):', secret.substring(0, 4));
+        const appId = res.rows[0].app_id;
+        const secret = res.rows[0].api_secret.trim();
 
-        jwt.verify(token, secret);
-        console.log('✅ Local Verification SUCCESS!');
+        console.log('-----------------------------------------');
+        console.log('✅ DATABASE CREDENTIALS:');
+        console.log('App ID:', appId);
+        console.log('Secret:', secret);
+        console.log('-----------------------------------------');
+
+        const payload = {
+            appId: appId,
+            roomId: 'demo-room',
+            uid: 'tester-professional',
+            role: 'host',
+            type: 'video_call'
+        };
+
+        const token = jwt.sign(payload, secret);
+        console.log('🚀 COPY THIS WORKING TOKEN:');
+        console.log(token);
+        console.log('-----------------------------------------');
+        console.log('Pasting this into App.tsx will fix the signature error.');
+
     } catch (err) {
-        console.error('❌ Verification FAILED:', err.message);
+        console.error('❌ Error:', err.message);
     } finally {
         await pool.end();
     }
 }
 
-verify();
+repair();
