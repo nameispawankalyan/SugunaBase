@@ -113,12 +113,9 @@ const initDB = async () => {
             // Backfill secrets for existing projects
             const projects = await pool.query('SELECT id FROM projects WHERE api_secret IS NULL');
             for (let row of projects.rows) {
-                const secret = row.id === 15 ? "sk_live_15_51suguna" : `sk_live_${row.id}_${require('crypto').randomBytes(12).toString('hex')}`;
+                const secret = `sk_live_${row.id}_${require('crypto').randomBytes(12).toString('hex')}`;
                 await pool.query('UPDATE projects SET api_secret = $1 WHERE id = $2', [secret, row.id]);
             }
-
-            // Ensure Project 15 is always using the expected demo secret
-            await pool.query('UPDATE projects SET api_secret = $1 WHERE id = 15', ["sk_live_15_51suguna"]);
             // User Reset Password Fields
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;`);

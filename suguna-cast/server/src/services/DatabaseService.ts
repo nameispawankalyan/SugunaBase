@@ -43,14 +43,9 @@ export class DatabaseService {
 
     /**
      * Fetches the real secret key for a specific App ID from PostgreSQL.
-     * Falls back to hardcoded secrets for local development if DB is unreachable.
+     * This is fully dynamic based on the appId provided by the client.
      */
     static async getAppSecret(appId: string): Promise<string | null> {
-        const fallbacks: Record<string, string> = {
-            "15": "sk_live_15_51suguna",
-            "suguna-project-1": "suguna_cast_secret_key_2024"
-        };
-
         try {
             const result = await pool.query(
                 'SELECT api_secret FROM projects WHERE id = $1 OR package_name = $1',
@@ -60,15 +55,15 @@ export class DatabaseService {
             if (result.rows.length > 0) {
                 return result.rows[0].api_secret;
             }
-            return fallbacks[appId] || null;
+            return null;
         } catch (err) {
-            console.warn('[Database] DB not reachable, using developer fallback for appId:', appId);
-            return fallbacks[appId] || null;
+            console.error('[Database] Failed to fetch app secret for appId:', appId, err);
+            return null;
         }
     }
 
     /**
-     * Checks if a project is active using real DB data with dev fallback.
+     * Checks if a project is active using real DB data.
      */
     static async isProjectActive(appId: string): Promise<boolean> {
         try {
@@ -76,10 +71,9 @@ export class DatabaseService {
                 'SELECT is_active FROM projects WHERE id = $1 OR package_name = $1',
                 [appId]
             );
-            if (result.rows.length > 0) return result.rows[0].is_active;
-            return appId === "15" || appId === "suguna-project-1"; // Dev fallbacks
+            return result.rows.length > 0 && result.rows[0].is_active;
         } catch (err) {
-            return appId === "15" || appId === "suguna-project-1"; // Dev fallback
+            return false;
         }
     }
 }
