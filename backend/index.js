@@ -351,6 +351,32 @@ app.post('/v1/auth/reset-password', async (req, res) => {
 // --- AUTH ROUTES FOR APPS (End Users) ---
 
 // App User Login / Signup (Google / Email)
+// --- SUGUNA CAST TOKEN PROXY ---
+app.post('/v1/cast/get-token', async (req, res) => {
+    try {
+        const { app_id, app_secret, room_id, uid, role, type } = req.body;
+
+        if (!app_id || !app_secret) {
+            return res.status(400).json({ error: 'Missing app_id or app_secret' });
+        }
+
+        // Forward to Cast Media Server (Port 3100)
+        const response = await axios.post('http://127.0.0.1:3100/api/token/generate', {
+            appId: app_id,
+            appSecret: app_secret,
+            roomId: room_id,
+            uid: uid,
+            role: role || 'broadcaster',
+            type: type || 'video_call'
+        });
+
+        res.json(response.data);
+    } catch (error) {
+        console.error('Cast Token Error:', error.message);
+        res.status(500).json({ error: 'Failed to reach Cast Server: ' + error.message });
+    }
+});
+
 app.post('/v1/auth/app-login', async (req, res) => {
     const { project_id, email, name, photo_url, google_id, provider } = req.body;
 
