@@ -200,7 +200,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             value={stats?.auth?.total_users || 0}
                             icon={Users}
                             color="blue"
-                            trend="+12% from last week"
+                            trend={stats?.auth?.trend}
                         />
                         <StatCard
                             label="Firestore Usage"

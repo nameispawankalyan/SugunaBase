@@ -1207,13 +1207,27 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
     }
 
     try {
-        // 1. Get User Stats
-        const userStats = await pool.query('SELECT COUNT(*) as total FROM app_users WHERE project_id = $1', [projectId]);
+        // 1. Get User Stats (Filtered by range)
+        const userStats = await pool.query(`
+            SELECT COUNT(*) as total FROM app_users 
+            WHERE project_id = $1 AND created_at::date >= ${startDateSql} AND created_at::date <= ${endDateSql}
+        `, [projectId]);
 
-        // 2. Get Storage Stats
-        const storageStats = await pool.query('SELECT SUM(file_size) as total_size, COUNT(*) as file_count FROM storage_files WHERE project_id = $1', [projectId]);
+        // 2. Get User Trend (Last 7 days vs previous 7 days)
+        const userTrend = await pool.query(`
+            SELECT 
+                COUNT(*) FILTER (WHERE created_at > CURRENT_DATE - INTERVAL '7 days') as this_week,
+                COUNT(*) FILTER (WHERE created_at > CURRENT_DATE - INTERVAL '14 days' AND created_at <= CURRENT_DATE - INTERVAL '7 days') as last_week
+            FROM app_users WHERE project_id = $1
+        `, [projectId]);
 
-        // 3. Get Firestore Stats (With Gap Filling)
+        // 3. Get Storage Stats (Filtered by range)
+        const storageStats = await pool.query(`
+            SELECT SUM(file_size) as total_size, COUNT(*) as file_count FROM storage_files 
+            WHERE project_id = $1 AND created_at::date >= ${startDateSql} AND created_at::date <= ${endDateSql}
+        `, [projectId]);
+
+        // 4. Get Firestore Stats (With Gap Filling)
         const usageHistory = await pool.query(`
             SELECT 
                 series_date::date as date, 
@@ -1224,9 +1238,19 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
             ORDER BY series_date ASC
         `, [projectId]);
 
+        const thisWeek = parseInt(userTrend.rows[0].this_week || 0);
+        const lastWeek = parseInt(userTrend.rows[0].last_week || 0);
+        let trendPct = 0;
+        if (lastWeek > 0) {
+            trendPct = Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+        } else if (thisWeek > 0) {
+            trendPct = 100;
+        }
+
         res.json({
             auth: {
-                total_users: parseInt(userStats.rows[0].total)
+                total_users: parseInt(userStats.rows[0].total),
+                trend: trendPct >= 0 ? `+${trendPct}% from last week` : `${trendPct}% from last week`
             },
             storage: {
                 total_bytes: parseInt(storageStats.rows[0].total_size || 0),
