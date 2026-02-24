@@ -229,6 +229,10 @@ const initDB = async () => {
                 storage_bytes_used BIGINT DEFAULT 0,
                 auth_users_count INTEGER DEFAULT 0,
                 cast_minutes INTEGER DEFAULT 0,
+                cast_audio_call_mins INTEGER DEFAULT 0,
+                cast_video_call_mins INTEGER DEFAULT 0,
+                cast_audio_live_mins INTEGER DEFAULT 0,
+                cast_video_live_mins INTEGER DEFAULT 0,
                 function_executions INTEGER DEFAULT 0,
                 UNIQUE(project_id, date)
             );
@@ -238,6 +242,10 @@ const initDB = async () => {
         try {
             await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_minutes INTEGER DEFAULT 0;');
             await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS function_executions INTEGER DEFAULT 0;');
+            await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_audio_call_mins INTEGER DEFAULT 0;');
+            await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_video_call_mins INTEGER DEFAULT 0;');
+            await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_audio_live_mins INTEGER DEFAULT 0;');
+            await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_video_live_mins INTEGER DEFAULT 0;');
         } catch (e) { }
 
         console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs, Cast & Analytics)");
@@ -1242,6 +1250,10 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
                 COALESCE(p.firestore_reads, 0) as firestore_reads, 
                 COALESCE(p.firestore_writes, 0) as firestore_writes,
                 COALESCE(p.cast_minutes, 0) as cast_minutes,
+                COALESCE(p.cast_audio_call_mins, 0) as cast_audio_call_mins,
+                COALESCE(p.cast_video_call_mins, 0) as cast_video_call_mins,
+                COALESCE(p.cast_audio_live_mins, 0) as cast_audio_live_mins,
+                COALESCE(p.cast_video_live_mins, 0) as cast_video_live_mins,
                 COALESCE(p.function_executions, 0) as function_executions
             FROM GENERATE_SERIES(${startDateSql}, ${endDateSql}, '1 day'::interval) as series_date
             LEFT JOIN project_usage p ON p.date = series_date::date AND p.project_id = $1
@@ -1261,6 +1273,10 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
         const totals = {
             firestore: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.firestore_reads) + parseInt(row.firestore_writes), 0),
             cast: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.cast_minutes), 0),
+            cast_audio_call: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.cast_audio_call_mins), 0),
+            cast_video_call: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.cast_video_call_mins), 0),
+            cast_audio_live: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.cast_audio_live_mins), 0),
+            cast_video_live: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.cast_video_live_mins), 0),
             functions: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.function_executions), 0)
         };
 
@@ -1278,7 +1294,11 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
                 history: usageHistory.rows
             },
             cast: {
-                total: totals.cast
+                total: totals.cast,
+                audio_call: totals.cast_audio_call,
+                video_call: totals.cast_video_call,
+                audio_live: totals.cast_audio_live,
+                video_live: totals.cast_video_live
             },
             functions: {
                 total: totals.functions

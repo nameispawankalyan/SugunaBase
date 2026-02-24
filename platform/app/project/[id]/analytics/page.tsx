@@ -133,14 +133,40 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     tension: 0.4,
                 }];
             case 'cast':
-                return [{
-                    label: 'Minutes Used',
-                    data: history.map((h: any) => h.cast_minutes || 0),
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                }];
+                return [
+                    {
+                        label: 'Audio Call',
+                        data: history.map((h: any) => h.cast_audio_call_mins || 0),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    },
+                    {
+                        label: 'Video Call',
+                        data: history.map((h: any) => h.cast_video_call_mins || 0),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    },
+                    {
+                        label: 'Audio Live',
+                        data: history.map((h: any) => h.cast_audio_live_mins || 0),
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    },
+                    {
+                        label: 'Video Live',
+                        data: history.map((h: any) => h.cast_video_live_mins || 0),
+                        borderColor: '#f43f5e',
+                        backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    }
+                ];
             case 'functions':
                 return [{
                     label: 'Executions',
