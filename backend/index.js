@@ -228,9 +228,17 @@ const initDB = async () => {
                 firestore_writes INTEGER DEFAULT 0,
                 storage_bytes_used BIGINT DEFAULT 0,
                 auth_users_count INTEGER DEFAULT 0,
+                cast_minutes INTEGER DEFAULT 0,
+                function_executions INTEGER DEFAULT 0,
                 UNIQUE(project_id, date)
             );
         `);
+
+        // Migration for new columns
+        try {
+            await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_minutes INTEGER DEFAULT 0;');
+            await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS function_executions INTEGER DEFAULT 0;');
+        } catch (e) { }
 
         console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs, Cast & Analytics)");
         initSchedules(); // Start the Cron Engine
@@ -1232,7 +1240,9 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
             SELECT 
                 series_date::date as date, 
                 COALESCE(p.firestore_reads, 0) as firestore_reads, 
-                COALESCE(p.firestore_writes, 0) as firestore_writes
+                COALESCE(p.firestore_writes, 0) as firestore_writes,
+                COALESCE(p.cast_minutes, 0) as cast_minutes,
+                COALESCE(p.function_executions, 0) as function_executions
             FROM GENERATE_SERIES(${startDateSql}, ${endDateSql}, '1 day'::interval) as series_date
             LEFT JOIN project_usage p ON p.date = series_date::date AND p.project_id = $1
             ORDER BY series_date ASC
@@ -1247,6 +1257,13 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
             trendPct = 100;
         }
 
+        // Aggregate totals for the range
+        const totals = {
+            firestore: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.firestore_reads) + parseInt(row.firestore_writes), 0),
+            cast: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.cast_minutes), 0),
+            functions: usageHistory.rows.reduce((acc, row) => acc + parseInt(row.function_executions), 0)
+        };
+
         res.json({
             auth: {
                 total_users: parseInt(userStats.rows[0].total),
@@ -1257,7 +1274,14 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
                 total_files: parseInt(storageStats.rows[0].file_count)
             },
             firestore: {
+                total: totals.firestore,
                 history: usageHistory.rows
+            },
+            cast: {
+                total: totals.cast
+            },
+            functions: {
+                total: totals.functions
             }
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
