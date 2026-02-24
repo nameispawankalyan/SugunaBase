@@ -219,7 +219,20 @@ const initDB = async () => {
             );
         `);
 
-        console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs & Cast)");
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS project_usage (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                date DATE DEFAULT CURRENT_DATE,
+                firestore_reads INTEGER DEFAULT 0,
+                firestore_writes INTEGER DEFAULT 0,
+                storage_bytes_used BIGINT DEFAULT 0,
+                auth_users_count INTEGER DEFAULT 0,
+                UNIQUE(project_id, date)
+            );
+        `);
+
+        console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs, Cast & Analytics)");
         initSchedules(); // Start the Cron Engine
     } catch (err) {
         console.error("❌ DB Init Error:", err);
@@ -424,6 +437,19 @@ app.post('/v1/auth/app-login', async (req, res) => {
     }
 });
 
+// Helper to increment analytics
+const trackUsage = async (projectId, type) => {
+    try {
+        const column = type === 'read' ? 'firestore_reads' : 'firestore_writes';
+        await pool.query(`
+            INSERT INTO project_usage (project_id, date, ${column})
+            VALUES ($1, CURRENT_DATE, 1)
+            ON CONFLICT (project_id, date) 
+            DO UPDATE SET ${column} = project_usage.${column} + 1
+        `, [projectId]);
+    } catch (e) { console.error("Tracking Error:", e.message); }
+};
+
 // --- SUGUNA FIRESTORE API (Generic Document Store) ---
 
 // App User Middleware (Verify App Token)
@@ -458,6 +484,7 @@ app.get('/v1/firestore/*', authenticateAppToken, async (req, res) => {
                 [project_id, collection_name, document_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
+            trackUsage(project_id, 'read');
             res.json(result.rows[0].data);
         } catch (e) { res.status(500).json({ error: e.message }); }
     } else {
@@ -477,6 +504,7 @@ app.get('/v1/firestore/*', authenticateAppToken, async (req, res) => {
 
         try {
             const result = await pool.query(queryText, queryParams);
+            trackUsage(project_id, 'read');
             res.json(result.rows);
         } catch (e) { res.status(500).json({ error: e.message }); }
     }
@@ -510,6 +538,7 @@ app.post('/v1/firestore/*', authenticateAppToken, async (req, res) => {
             data: data
         });
 
+        trackUsage(project_id, 'write');
         res.json({ message: "Document Saved", collection_name, document_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -552,6 +581,7 @@ app.patch('/v1/firestore/*', authenticateAppToken, async (req, res) => {
             data: finalData
         });
 
+        trackUsage(project_id, 'write');
         res.json({ message: "Document Merged", collection_name, document_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1134,6 +1164,39 @@ app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
 
         io.to(req.user.id.toString()).emit("project_deleted", req.params.id);
         res.json({ message: 'Deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- ANALYTICS DASHBOARD API ---
+app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    try {
+        // 1. Get User Stats
+        const userStats = await pool.query('SELECT COUNT(*) as total FROM app_users WHERE project_id = $1', [projectId]);
+
+        // 2. Get Storage Stats
+        const storageStats = await pool.query('SELECT SUM(file_size) as total_size, COUNT(*) as file_count FROM storage_files WHERE project_id = $1', [projectId]);
+
+        // 3. Get Firestore Stats (Reads/Writes for last 7 days)
+        const usageHistory = await pool.query(`
+            SELECT date, firestore_reads, firestore_writes 
+            FROM project_usage 
+            WHERE project_id = $1 AND date > CURRENT_DATE - INTERVAL '7 days'
+            ORDER BY date ASC
+        `, [projectId]);
+
+        res.json({
+            auth: {
+                total_users: parseInt(userStats.rows[0].total)
+            },
+            storage: {
+                total_bytes: parseInt(storageStats.rows[0].total_size || 0),
+                total_files: parseInt(storageStats.rows[0].file_count)
+            },
+            firestore: {
+                history: usageHistory.rows
+            }
+        });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

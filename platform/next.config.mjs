@@ -5,7 +5,7 @@ const nextConfig = {
     return [
       {
         source: "/api/proxy/:path*",
-        destination: "http://165.232.183.6/v1/:path*", // Proxy to Remote Backend (Port 80)
+        destination: "http://165.232.183.6/v1/:path*", // Proxy to Remote Backend (Port 80) 165.232.183.6
       },
     ];
   },
