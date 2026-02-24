@@ -11,25 +11,32 @@ import { config } from './config';
 import { Room } from './Room';
 import { TokenService } from './services/TokenService';
 import { AnalyticsService } from './services/AnalyticsService';
+import { DatabaseService } from './services/DatabaseService';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 // Initialize Services
 new AnalyticsService();
 
 // Dashboard API Routes for SugunaBase Console
-app.get('/api/stats/:appId', (req, res) => {
+app.get('/api/stats/:appId', async (req, res) => {
     const { appId } = req.params;
-    // Current live stats + aggregate
+
+    // 1. Live stats from memory
     const liveRooms = AnalyticsService.getLiveRooms(appId);
-    const totalParticipants = liveRooms.reduce((acc, room) => acc + room.participantCount, 0);
+    const activeParticipants = liveRooms.reduce((acc, room) => acc + room.participantCount, 0);
+
+    // 2. Historical stats from Database
+    const historical = await DatabaseService.getAppStats(appId);
 
     res.json({
-        totalCalls: 128, // Mocked total
+        totalCalls: historical.totalCalls,
         activeRooms: liveRooms.length,
-        activeParticipants: totalParticipants,
-        successRate: '99.9%'
+        activeParticipants: activeParticipants,
+        successRate: '99.9%', // Can be calculated from error logs if available
+        avgDuration: historical.avgDuration
     });
 });
 
@@ -45,6 +52,29 @@ app.get('/api/history/:appId', (req, res) => {
         { id: 'h-1', user: 'user-raj3d', type: 'Video', duration: '25m 12s', network: '5G', location: 'Hyderabad, TS', time: '2h ago' },
         { id: 'h-2', user: 'user-pav45', type: 'Audio', duration: '12m 05s', network: 'WiFi', location: 'Vizag, AP', time: '5h ago' }
     ]);
+});
+
+// Automated Token Generation for SDK/App Testing
+app.post('/api/token/generate', async (req, res) => {
+    try {
+        const { appId, appSecret, roomId, uid, role, type } = req.body;
+
+        if (!appId || !appSecret || !roomId || !uid) {
+            return res.status(400).json({ error: 'Missing required fields: appId, appSecret, roomId, uid' });
+        }
+
+        const token = await TokenService.generateToken({
+            appId,
+            roomId,
+            uid,
+            role: role || 'broadcaster',
+            type: type || 'video_call'
+        }, appSecret);
+
+        res.json({ token });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 let workers: mediasoup.types.Worker[] = [];

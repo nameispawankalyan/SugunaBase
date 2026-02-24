@@ -12,17 +12,6 @@ export interface CastTokenPayload {
 
 export class TokenService {
     static async verifyToken(token: string): Promise<CastTokenPayload> {
-        // BYPASS FOR DEMO TESTING - TODO: Remove in real production
-        if (token.startsWith("eyJhbG") && token.includes("your-signature-here")) {
-            return {
-                appId: "suguna-project-1",
-                roomId: "demo-room",
-                uid: "TEMP_IDENTITY",
-                role: "host",
-                type: "video_call"
-            };
-        }
-
         try {
             // 1. Decode without verification to get appId
             const decoded = jwt.decode(token) as CastTokenPayload;
@@ -47,5 +36,25 @@ export class TokenService {
         } catch (error) {
             throw new Error('Authentication Failed: ' + (error as Error).message);
         }
+    }
+
+    static async generateToken(payload: CastTokenPayload, providedSecret: string): Promise<string> {
+        // 1. Get secret from SugunaBase DB
+        const dbSecret = await DatabaseService.getAppSecret(payload.appId);
+        if (!dbSecret) {
+            throw new Error('App not found or inactive');
+        }
+
+        // 2. Verify provided secret matches DB secret
+        if (dbSecret !== providedSecret.trim()) {
+            throw new Error('Invalid App Secret');
+        }
+
+        // 3. Generate JWT (expires in 24 hours by default if not specified)
+        const options: jwt.SignOptions = {
+            expiresIn: payload.exp ? undefined : '24h'
+        };
+
+        return jwt.sign(payload, dbSecret, options);
     }
 }

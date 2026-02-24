@@ -83,4 +83,27 @@ export class DatabaseService {
             return false;
         }
     }
+
+    static async getAppStats(appId: string): Promise<any> {
+        try {
+            const result = await pool.query(
+                `SELECT 
+                    COUNT(*) as total_calls,
+                    AVG(duration) as avg_duration,
+                    COUNT(DISTINCT room_id) as total_rooms
+                 FROM cast_calls 
+                 WHERE app_id = $1`,
+                [appId]
+            );
+
+            return {
+                totalCalls: parseInt(result.rows[0].total_calls) || 0,
+                avgDuration: parseFloat(result.rows[0].avg_duration) || 0,
+                totalRooms: parseInt(result.rows[0].total_rooms) || 0
+            };
+        } catch (err) {
+            console.error('[Database] Failed to fetch stats:', err);
+            return { totalCalls: 0, avgDuration: 0, totalRooms: 0 };
+        }
+    }
 }
