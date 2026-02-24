@@ -34,6 +34,17 @@ ChartJS.register(
     Filler
 );
 
+const rangeLabels: any = {
+    'today': 'Today',
+    'yesterday': 'Yesterday',
+    '7d': 'Last 7 Days',
+    '30d': 'Last 30 Days',
+    '90d': 'Last 90 Days',
+    'current_month': 'Current Month',
+    'last_month': 'Last Month',
+    'custom': 'Custom Range'
+};
+
 export default function AnalyticsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: projectId } = use(params);
     const [stats, setStats] = useState<any>(null);
@@ -219,7 +230,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         <div className="flex items-center justify-between mb-8">
                             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                                 <TrendingUp className="h-5 w-5 text-primary" />
-                                Firestore Activity (Last 7 Days)
+                                Firestore Activity ({rangeLabels[range]})
                             </h2>
                             <div className="flex gap-2">
                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 px-3 py-1 bg-gray-50 rounded-full border border-gray-100">
