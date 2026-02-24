@@ -1170,6 +1170,38 @@ app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
 // --- ANALYTICS DASHBOARD API ---
 app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (req, res) => {
     const { projectId } = req.params;
+    const { range, startDate, endDate } = req.query;
+
+    let dateCondition = "date > CURRENT_DATE - INTERVAL '7 days'";
+
+    if (range) {
+        switch (range) {
+            case 'today':
+                dateCondition = "date = CURRENT_DATE";
+                break;
+            case 'yesterday':
+                dateCondition = "date = CURRENT_DATE - INTERVAL '1 day'";
+                break;
+            case '30d':
+                dateCondition = "date > CURRENT_DATE - INTERVAL '30 days'";
+                break;
+            case '90d':
+                dateCondition = "date > CURRENT_DATE - INTERVAL '90 days'";
+                break;
+            case 'current_month':
+                dateCondition = "date >= DATE_TRUNC('month', CURRENT_DATE)";
+                break;
+            case 'last_month':
+                dateCondition = "date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month') AND date < DATE_TRUNC('month', CURRENT_DATE)";
+                break;
+            case 'custom':
+                if (startDate && endDate) {
+                    dateCondition = `date >= '${startDate}' AND date <= '${endDate}'`;
+                }
+                break;
+        }
+    }
+
     try {
         // 1. Get User Stats
         const userStats = await pool.query('SELECT COUNT(*) as total FROM app_users WHERE project_id = $1', [projectId]);
@@ -1177,11 +1209,11 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (r
         // 2. Get Storage Stats
         const storageStats = await pool.query('SELECT SUM(file_size) as total_size, COUNT(*) as file_count FROM storage_files WHERE project_id = $1', [projectId]);
 
-        // 3. Get Firestore Stats (Reads/Writes for last 7 days)
+        // 3. Get Firestore Stats (Based on dynamic range)
         const usageHistory = await pool.query(`
             SELECT date, firestore_reads, firestore_writes 
             FROM project_usage 
-            WHERE project_id = $1 AND date > CURRENT_DATE - INTERVAL '7 days'
+            WHERE project_id = $1 AND ${dateCondition}
             ORDER BY date ASC
         `, [projectId]);
 
