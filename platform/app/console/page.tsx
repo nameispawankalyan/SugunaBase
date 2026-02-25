@@ -6,10 +6,68 @@ import { api } from '@/utils/api';
 import {
     Plus, Trash2, Box, Settings, Smartphone, Globe, Monitor,
     Users, Search, ShieldCheck, ShieldAlert, ChevronRight,
-    LayoutDashboard, Activity, Database, CheckCircle2, XCircle
+    LayoutDashboard, Activity, Database, CheckCircle2, XCircle, AlertCircle, X
 } from 'lucide-react';
 import Link from 'next/link';
 import { io } from 'socket.io-client';
+
+// Premium Modal Component
+const Modal = ({ isOpen, title, message, onConfirm, onCancel, confirmText, type = 'confirm' }: any) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border border-gray-100">
+                <div className="p-10 text-center">
+                    {type === 'danger' ? (
+                        <div className="h-20 w-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Trash2 className="h-10 w-10 text-red-500" />
+                        </div>
+                    ) : (
+                        <div className="h-20 w-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <AlertCircle className="h-10 w-10 text-orange-500" />
+                        </div>
+                    )}
+                    <h3 className="text-2xl font-black text-gray-900 tracking-tight mb-3">{title}</h3>
+                    <p className="text-gray-500 font-medium leading-relaxed">{message}</p>
+                </div>
+                <div className="flex border-t border-gray-50">
+                    <button
+                        onClick={onCancel}
+                        className="flex-1 px-8 py-6 text-xs font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-all font-sans"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        className={`flex-1 px-8 py-6 text-xs font-black uppercase tracking-widest transition-all ${type === 'danger' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-orange-600 text-white hover:bg-orange-700'}`}
+                    >
+                        {confirmText || 'Confirm'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Toast Component
+const Toast = ({ message, type, onClose }: any) => {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 4000);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    return (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[210] animate-in slide-in-from-bottom-5 duration-300">
+            <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl border backdrop-blur-xl shadow-2xl ${type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-red-500/10 border-red-500/20 text-red-600'}`}>
+                {type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+                <span className="text-sm font-black tracking-tight">{message}</span>
+                <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-all ml-2">
+                    <X className="h-4 w-4" />
+                </button>
+            </div>
+        </div>
+    );
+};
 
 export default function Dashboard() {
     const router = useRouter();
@@ -22,6 +80,10 @@ export default function Dashboard() {
     const [newProjectName, setNewProjectName] = useState('');
     const [customProjectId, setCustomProjectId] = useState('');
     const [idError, setIdError] = useState('');
+
+    // Modal & Toast State
+    const [modal, setModal] = useState<any>({ isOpen: false });
+    const [toast, setToast] = useState<any>(null);
 
     // Admin State
     const [developers, setDevelopers] = useState<any[]>([]);
@@ -100,6 +162,30 @@ export default function Dashboard() {
             const projects = await api.get(`/admin/users/${dev.id}/projects`);
             setDevProjects(projects);
         } catch (e) { console.error(e); }
+    };
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+    };
+
+    const handleDeleteProject = (p: any) => {
+        setModal({
+            isOpen: true,
+            title: 'Delete Project',
+            message: `Are you sure you want to delete "${p.name}"? This action cannot be undone.`,
+            type: 'danger',
+            confirmText: 'Delete Project',
+            onConfirm: async () => {
+                setModal({ isOpen: false });
+                try {
+                    await api.delete(`/projects/${p.project_id || p.id}`);
+                    fetchData();
+                    showToast('Project deleted successfully');
+                } catch (e: any) {
+                    showToast(e.message, 'error');
+                }
+            }
+        });
     };
 
     const logout = () => {
@@ -280,7 +366,10 @@ export default function Dashboard() {
 
     // --- DEVELOPER VIEW (Normal Dashboard) ---
     return (
-        <div className="p-8 max-w-7xl mx-auto">
+        <div className="p-8 max-w-7xl mx-auto relative min-h-screen">
+            {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+            <Modal {...modal} onCancel={() => setModal({ isOpen: false })} />
+
             <div className="flex justify-between items-center mb-10">
                 <div>
                     <h1 className="text-3xl font-black text-gray-900 leading-tight">My Projects</h1>
@@ -322,9 +411,22 @@ export default function Dashboard() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-black text-xl text-gray-900 truncate">{project.name}</h3>
-                                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">{project.project_id}</p>
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{project.platform}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">{project.project_id}</p>
+                                        <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{project.platform}</p>
+                                    </div>
                                 </div>
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDeleteProject(project);
+                                    }}
+                                    className="p-3 bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-2xl transition-all z-20 opacity-0 group-hover:opacity-100"
+                                >
+                                    <Trash2 className="h-5 w-5" />
+                                </button>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 pt-6 border-t border-gray-50">

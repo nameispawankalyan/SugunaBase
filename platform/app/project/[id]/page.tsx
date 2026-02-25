@@ -107,6 +107,7 @@ export default function ProjectDetails() {
     const [isAddingApp, setIsAddingApp] = useState(false);
     const [newAppName, setNewAppName] = useState('');
     const [newPackageName, setNewPackageName] = useState('');
+    const [newAppPlatform, setNewAppPlatform] = useState('android');
     const [error, setError] = useState<string | null>(null);
 
     // Modal & Toast State
@@ -150,13 +151,19 @@ export default function ProjectDetails() {
             showToast('Package name is required', 'error');
             return;
         }
+        if (!newAppPlatform) {
+            showToast('Platform is required', 'error');
+            return;
+        }
         try {
             await api.post(`/projects/${projectId}/apps`, {
                 package_name: newPackageName,
-                app_name: newAppName || 'My App'
+                app_name: newAppName || 'My App',
+                platform: newAppPlatform
             });
             setNewAppName('');
             setNewPackageName('');
+            setNewAppPlatform('android');
             setIsAddingApp(false);
             await fetchProjectAndApps();
             showToast('App registered successfully!');
@@ -366,6 +373,21 @@ export default function ProjectDetails() {
                                                         value={newPackageName}
                                                         onChange={(e) => setNewPackageName(e.target.value)}
                                                     />
+                                                </div>
+                                            </div>
+
+                                            <div className="mb-8">
+                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2 block mb-3">Target Platform</label>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    {['android', 'ios', 'web'].map(p => (
+                                                        <button
+                                                            key={p}
+                                                            onClick={() => setNewAppPlatform(p)}
+                                                            className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${newAppPlatform === p ? 'border-blue-600 bg-blue-600/10 text-blue-500' : 'border-white/5 text-gray-500 bg-white/[0.02]'}`}
+                                                        >
+                                                            {p}
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             </div>
                                             <div className="flex gap-4">
