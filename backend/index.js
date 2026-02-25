@@ -213,8 +213,8 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS app_id VARCHAR(50) UNIQUE;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS fcm_service_account JSONB;`);
 
-            // Upgrade credentials for all projects (only if they lack a secure App ID)
-            const projects = await pool.query('SELECT id FROM projects WHERE app_id IS NULL');
+            // Upgrade credentials for all projects (only if they lack a secure App ID or Secret)
+            const projects = await pool.query('SELECT id FROM projects WHERE app_id IS NULL OR api_secret IS NULL');
             for (let row of projects.rows) {
                 const appId = require('crypto').randomBytes(16).toString('hex'); // 32 chars
                 const apiSecret = require('crypto').randomBytes(16).toString('hex'); // 32 chars
@@ -867,13 +867,23 @@ app.put('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) 
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Delete Project
-app.delete('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
+// Rotate API Keys
+app.post('/v1/projects/:id/keys/rotate', authenticateToken, resolveProject, async (req, res) => {
     try {
-        await pool.query('DELETE FROM projects WHERE id = $1', [req.project.id]);
-        res.json({ success: true, message: "Project deleted successfully" });
+        const crypto = require('crypto');
+        const appId = crypto.randomBytes(16).toString('hex');
+        const apiSecret = crypto.randomBytes(16).toString('hex');
+
+        await pool.query(
+            'UPDATE projects SET app_id = $1, api_secret = $2 WHERE id = $3',
+            [appId, apiSecret, req.project.id]
+        );
+
+        res.json({ success: true, app_id: appId, api_secret: apiSecret });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// Delete Project
 
 // Download Config JSON (Suguna Services) - Endpoint to generate the file
 app.get('/v1/projects/:id/config', authenticateToken, resolveProject, async (req, res) => {

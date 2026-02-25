@@ -43,18 +43,32 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
             ]);
 
             setStats({
-                totalCalls: statsRes.totalCalls,
-                totalMinutes: statsRes.totalCalls * 12, // Estimated
-                activeParticipants: statsRes.activeParticipants,
-                successRate: statsRes.successRate
+                totalCalls: statsRes?.totalCalls || 0,
+                totalMinutes: (statsRes?.totalCalls || 0) * 12,
+                activeParticipants: statsRes?.activeParticipants || 0,
+                successRate: statsRes?.successRate || '100%'
             });
-            setLiveRooms(roomsRes);
-            setCallHistory(historyRes);
+            setLiveRooms(roomsRes || []);
+            setCallHistory(historyRes || []);
             setProjectDetails(projectRes);
         } catch (error) {
             console.error('Failed to fetch cast data:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleRotateKeys = async () => {
+        if (!confirm('Are you sure? This will break existing apps using the old keys.')) return;
+        try {
+            const res = await api.post(`/projects/${id}/keys/rotate`, {});
+            if (res.success) {
+                setProjectDetails({ ...projectDetails, app_id: res.app_id, api_secret: res.api_secret });
+                alert('Keys rotated successfully!');
+            }
+        } catch (error) {
+            console.error('Failed to rotate keys:', error);
+            alert('Failed to rotate keys');
         }
     };
 
@@ -247,7 +261,10 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
                                 </h3>
                                 <p className="text-sm text-gray-500 font-bold mt-1 uppercase tracking-tight">Project ID: {id}</p>
                             </div>
-                            <button className="px-4 py-2 bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-all flex items-center gap-2 shadow-sm">
+                            <button
+                                onClick={handleRotateKeys}
+                                className="px-4 py-2 bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-all flex items-center gap-2 shadow-sm"
+                            >
                                 <RefreshCw className="h-3.5 w-3.5" /> Rotate Keys
                             </button>
                         </div>
