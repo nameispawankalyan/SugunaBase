@@ -56,7 +56,7 @@ app.post('/login', async (req, res) => {
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) {
             console.warn(`[AUTH] User not found: ${email}`);
-            return res.status(401).json({ error: 'Invalid email or password' });
+            return res.status(401).json({ error: 'User not found in system' });
         }
 
         const user = result.rows[0];
@@ -68,7 +68,7 @@ app.post('/login', async (req, res) => {
         const match = await bcrypt.compare(password, user.password_hash);
         if (!match) {
             console.warn(`[AUTH] Password mismatch for: ${email}`);
-            return res.status(401).json({ error: 'Invalid email or password' });
+            return res.status(401).json({ error: 'Incorrect password' });
         }
 
         console.log(`[AUTH] Login Success: ${email}`);
