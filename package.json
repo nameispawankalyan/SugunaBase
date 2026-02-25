@@ -1,0 +1,8 @@
+{
+    "name": "sugunabase-master",
+    "version": "1.0.0",
+    "description": "distributed microservices orchestration project",
+    "scripts": {
+        "start": "node run-sugunabase.js"
+    }
+}

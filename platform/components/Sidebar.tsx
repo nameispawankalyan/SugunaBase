@@ -19,7 +19,10 @@ import {
   BarChart2,
   Globe,
   ArrowLeft,
-  PhoneCall
+  PhoneCall,
+  Bell,
+  Activity,
+  FileText
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -131,6 +134,7 @@ const Sidebar = () => {
             <NavItem href={`/project/${projectId}/hosting`} icon={Globe} label="Hosting" pathname={pathname} />
             <NavItem href={`/project/${projectId}/functions`} icon={FileCode} label="Functions" pathname={pathname} />
             <NavItem href={`/project/${projectId}/cast`} icon={PhoneCall} label="Suguna Cast" pathname={pathname} />
+            <NavItem href={`/project/${projectId}/messaging`} icon={Bell} label="Cloud Messaging" pathname={pathname} />
           </nav>
         </div>
 
@@ -142,6 +146,17 @@ const Sidebar = () => {
           <nav className="space-y-0.5">
             <NavItem href={`/project/${projectId}/analytics`} icon={BarChart2} label="Dashboard" pathname={pathname} />
             <NavItem href={`/project/${projectId}/events`} icon={Zap} label="Events" pathname={pathname} />
+          </nav>
+        </div>
+
+        {/* Monitoring Section */}
+        <div>
+          <div className="px-4 text-[11px] font-bold uppercase tracking-wider mb-2 text-[#68859e]">
+            Monitoring
+          </div>
+          <nav className="space-y-0.5">
+            <NavItem href={`/project/${projectId}/health`} icon={Activity} label="System Status" pathname={pathname} />
+            <NavItem href={`/project/${projectId}/logs`} icon={FileText} label="Real-time Logs" pathname={pathname} />
           </nav>
         </div>
 

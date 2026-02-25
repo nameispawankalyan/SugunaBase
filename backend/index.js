@@ -41,12 +41,6 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
-const uploadDir = path.join(__dirname, 'storage_uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-app.use('/storage', express.static(uploadDir));
-
 // ====================================================
 // CLOUD FUNCTIONS PROXY (Bypass Nginx Cache Issues)
 // ====================================================
@@ -110,6 +104,7 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS api_secret TEXT;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS app_id VARCHAR(50) UNIQUE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS fcm_service_account JSONB;`);
 
             // Upgrade credentials for all projects (only if they lack a secure App ID)
             const projects = await pool.query('SELECT id FROM projects WHERE app_id IS NULL');
@@ -181,12 +176,37 @@ const initDB = async () => {
                 UNIQUE(project_id, site_name)
             );
         `);
-        // Migration for existing table
-        try { await pool.query('ALTER TABLE hosting_sites ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;'); } catch (e) { }
-        // Migration: Add columns if they don't exist
+
+        // Messaging Tables
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS messaging_tokens (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                app_user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
+                fcm_token TEXT NOT NULL,
+                device_id VARCHAR(255),
+                platform VARCHAR(50) DEFAULT 'android',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, app_user_id, fcm_token)
+            );
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS notifications_history (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                title VARCHAR(255),
+                body TEXT,
+                image_url TEXT,
+                data JSONB DEFAULT '{}',
+                status VARCHAR(50) DEFAULT 'sent',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // Messaging Table Migrations
         try {
-            await pool.query("ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS region VARCHAR(100) DEFAULT 'asia-south1';");
-            await pool.query("ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS timeout_seconds INTEGER DEFAULT 60;");
+            await pool.query('ALTER TABLE notifications_history ADD COLUMN IF NOT EXISTS sent_count INTEGER DEFAULT 0;');
+            await pool.query('ALTER TABLE notifications_history ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0;');
         } catch (e) { }
         await pool.query(`
             CREATE TABLE IF NOT EXISTS function_logs (
@@ -247,6 +267,17 @@ const initDB = async () => {
             await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_audio_live_mins INTEGER DEFAULT 0;');
             await pool.query('ALTER TABLE project_usage ADD COLUMN IF NOT EXISTS cast_video_live_mins INTEGER DEFAULT 0;');
         } catch (e) { }
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS system_logs (
+                id SERIAL PRIMARY KEY,
+                project_id VARCHAR(100),
+                service_name VARCHAR(50),
+                level VARCHAR(20),
+                message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
         console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs, Cast & Analytics)");
         initSchedules(); // Start the Cron Engine
@@ -311,70 +342,39 @@ const updateFunctionSchedule = async (projectId, funcName, cronString) => {
 
 initDB();
 
-// --- AUTH ROUTES FOR CONSOLE (Developers) ---
-app.post('/v1/auth/signup', async (req, res) => {
-    const { email, password, name } = req.body;
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await pool.query(
-            'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name',
-            [email, hashedPassword, name]
-        );
-        const token = jwt.sign({ id: result.rows[0].id }, JWT_SECRET, { expiresIn: '1d' });
-        res.status(201).json({ user: result.rows[0], token });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+// ====================================================
+// AUTH PROXY (suguna-auth: 3300)
+// ====================================================
+app.post('/v1/auth/signup', (req, res) => {
+    axios.post('http://localhost:3300/signup', req.body)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.post('/v1/auth/login', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
-
-        const user = result.rows[0];
-        const match = await bcrypt.compare(password, user.password_hash);
-        if (!match) return res.status(401).json({ error: 'Invalid credentials' });
-
-        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
-        res.json({ user: { id: user.id, email: user.email, name: user.name }, token });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.post('/v1/auth/login', (req, res) => {
+    axios.post('http://localhost:3300/login', req.body)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.post('/v1/auth/forgot-password', async (req, res) => {
-    const { email } = req.body;
-    try {
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (result.rows.length === 0) return res.json({ message: 'If email exists, reset link sent.' }); // Security: Don't reveal existence
-
-        const user = result.rows[0];
-        // Generate a random token (secure enough for now)
-        const resetToken = require('crypto').randomBytes(32).toString('hex');
-        const expiry = new Date(Date.now() + 3600000); // 1 Hour
-
-        await pool.query('UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE id = $3', [resetToken, expiry, user.id]);
-
-        // SIMULATE EMAIL SENDING
-        const resetLink = `https://suguna.co/reset-password?token=${resetToken}`;
-        console.log(`\nPassword Reset Requested for ${email}:\nLink: ${resetLink}\n`);
-
-        res.json({ message: 'If email exists, reset link sent.', debug_token: resetToken }); // Including token for testing, remove in prod!
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.post('/v1/auth/forgot-password', (req, res) => {
+    axios.post('http://localhost:3300/forgot-password', req.body)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.post('/v1/auth/reset-password', async (req, res) => {
-    const { token, newPassword } = req.body;
-    try {
-        const result = await pool.query("SELECT * FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()", [token]);
-        if (result.rows.length === 0) return res.status(400).json({ error: "Invalid or expired token" });
-
-        const user = result.rows[0];
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        await pool.query("UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2", [hashedPassword, user.id]);
-
-        res.json({ message: "Password updated successfully" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.post('/v1/auth/reset-password', (req, res) => {
+    axios.post('http://localhost:3300/reset-password', req.body)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
+
+app.post('/v1/auth/app-login', (req, res) => {
+    axios.post('http://localhost:3300/app-login', req.body)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+});
+// ====================================================
 
 
 // --- AUTH ROUTES FOR APPS (End Users) ---
@@ -406,369 +406,80 @@ app.post('/v1/cast/get-token', async (req, res) => {
     }
 });
 
-app.post('/v1/auth/app-login', async (req, res) => {
-    const { project_id, email, name, photo_url, google_id, provider } = req.body;
 
-    // In real world: Verify 'project_id' exists and 'google_id_token' is valid.
-
-    try {
-        // Check if user exists in this project
-        const check = await pool.query(
-            'SELECT * FROM app_users WHERE project_id = $1 AND email = $2',
-            [project_id, email]
-        );
-
-        // Check if Google Sign-In is enabled for this project
-        if (provider === 'google') {
-            const projectResult = await pool.query('SELECT google_sign_in_enabled FROM projects WHERE id = $1', [project_id]);
-            if (projectResult.rows.length === 0) return res.status(404).json({ error: "Project not found" });
-            if (!projectResult.rows[0].google_sign_in_enabled) {
-                return res.status(403).json({ error: "Google Sign-In is disabled for this project" });
-            }
-        }
-
-        let user;
-        if (check.rows.length > 0) {
-            // Login: Update last_login
-            user = check.rows[0];
-            await pool.query('UPDATE app_users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
-        } else {
-            // Signup: Create new user
-            const insert = await pool.query(
-                `INSERT INTO app_users (project_id, email, name, profile_pic, provider, google_id) 
-                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-                [project_id, email, name, photo_url, provider || 'email', google_id]
-            );
-            user = insert.rows[0];
-        }
-
-        // Generate App User Token (Different from Developer Token)
-        const token = jwt.sign({ app_user_id: user.id, project_id: project_id }, JWT_SECRET, { expiresIn: '7d' });
-
-        res.json({ user, token });
-
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Helper to increment analytics
-const trackUsage = async (projectId, type) => {
-    try {
-        const column = type === 'read' ? 'firestore_reads' : 'firestore_writes';
-        await pool.query(`
-            INSERT INTO project_usage (project_id, date, ${column})
-            VALUES ($1, CURRENT_DATE, 1)
-            ON CONFLICT (project_id, date) 
-            DO UPDATE SET ${column} = project_usage.${column} + 1
-        `, [projectId]);
-    } catch (e) { console.error("Tracking Error:", e.message); }
-};
-
-// --- SUGUNA FIRESTORE API (Generic Document Store) ---
-
-// App User Middleware (Verify App Token)
-const authenticateAppToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) return res.status(401).json({ error: "No Token Provided" });
-
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-        if (err) return res.status(403).json({ error: "Invalid App Token" });
-        req.app_user = decoded; // Contains app_user_id and project_id
-        next();
-    });
-};
-
-// Unified Firestore Handler (Supports Deeply Nested Paths & Dynamic Filtering)
-app.get('/v1/firestore/*', authenticateAppToken, async (req, res) => {
-    const fullPath = req.params[0];
-    const segments = fullPath.split('/').filter(s => s.length > 0);
+// ====================================================
+// FIRESTORE PROXY (suguna-firestore: 3400)
+// ====================================================
+app.all('/v1/firestore/*', authenticateAppToken, (req, res) => {
     const { project_id } = req.app_user;
-
-    if (segments.length === 0) return res.status(400).json({ error: "Invalid path" });
-
-    if (segments.length % 2 === 0) {
-        // --- Document Request ---
-        const document_id = segments.pop();
-        const collection_name = segments.join('/');
-        try {
-            const result = await pool.query(
-                'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-                [project_id, collection_name, document_id]
-            );
-            if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
-            trackUsage(project_id, 'read');
-            res.json(result.rows[0].data);
-        } catch (e) { res.status(500).json({ error: e.message }); }
-    } else {
-        // --- Collection Request (With Dynamic Filtering) ---
-        const collection_name = segments.join('/');
-        let queryText = 'SELECT document_id, data FROM firestore_data WHERE project_id = $1 AND collection_name = $2';
-        const queryParams = [project_id, collection_name];
-
-        // Dynamic Filtering: ?language=Telugu&age=25
-        const filters = Object.keys(req.query);
-        filters.forEach((key, index) => {
-            queryText += ` AND data->>'${key}' = $${index + 3}`;
-            queryParams.push(req.query[key]);
-        });
-
-        queryText += ' ORDER BY created_at DESC';
-
-        try {
-            const result = await pool.query(queryText, queryParams);
-            trackUsage(project_id, 'read');
-            res.json(result.rows);
-        } catch (e) { res.status(500).json({ error: e.message }); }
-    }
-});
-
-app.post('/v1/firestore/*', authenticateAppToken, async (req, res) => {
     const fullPath = req.params[0];
-    const segments = fullPath.split('/').filter(s => s.length > 0);
-    const { project_id } = req.app_user;
-    const data = req.body;
 
-    if (segments.length % 2 !== 0) return res.status(400).json({ error: "POST requires a full document path" });
+    axios({
+        method: req.method,
+        url: `http://localhost:3400/data/${fullPath}`,
+        data: req.body,
+        params: req.query,
+        headers: { 'x-project-id': project_id }
+    }).then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+});
+// ====================================================
 
-    const document_id = segments.pop();
-    const collection_name = segments.join('/');
 
-    try {
-        await pool.query(
-            `INSERT INTO firestore_data (project_id, collection_name, document_id, data) 
-             VALUES ($1, $2, $3, $4) 
-             ON CONFLICT (project_id, collection_name, document_id) 
-             DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
-            [project_id, collection_name, document_id, JSON.stringify(data)]
-        );
+// ====================================================
+// STORAGE PROXY (suguna-storage: 3500)
+// ====================================================
+// Handle Static Files
+app.use('/storage', createProxyMiddleware({
+    target: 'http://localhost:3500',
+    pathRewrite: { '^/storage': '/files' },
+    changeOrigin: true
+}));
 
-        // Notify Subscribers (Real-time Room)
-        io.to(`project_${project_id}_${collection_name}`).emit('firestore_update', {
-            type: 'set',
-            collection: collection_name,
-            document_id: document_id,
-            data: data
-        });
+// Handle App Uploads
+app.post('/v1/storage/upload', authenticateAppToken, (req, res, next) => {
+    // Inject headers for the storage service to consume
+    req.headers['x-project-id'] = req.app_user.project_id;
+    req.headers['x-folder-path'] = req.body.folder_path || '';
+    req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
+    next();
+}, createProxyMiddleware({
+    target: 'http://localhost:3500',
+    pathRewrite: { '^/v1/storage/upload': '/upload' },
+    changeOrigin: true
+}));
 
-        trackUsage(project_id, 'write');
-        res.json({ message: "Document Saved", collection_name, document_id });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+// Handle Console Uploads
+app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, (req, res, next) => {
+    req.headers['x-project-id'] = req.params.projectId;
+    req.headers['x-folder-path'] = req.body.folder_path || '';
+    req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
+    next();
+}, createProxyMiddleware({
+    target: 'http://localhost:3500',
+    pathRewrite: { '^/v1/console/projects/[^/]+/storage/upload': '/upload' },
+    changeOrigin: true
+}));
+
+// Console Storage Management
+app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, (req, res) => {
+    axios.post('http://localhost:3500/folder', { projectId: req.params.projectId, ...req.body })
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.patch('/v1/firestore/*', authenticateAppToken, async (req, res) => {
-    const fullPath = req.params[0];
-    const segments = fullPath.split('/').filter(s => s.length > 0);
-    const { project_id } = req.app_user;
-    const newData = req.body;
-
-    if (segments.length % 2 !== 0) return res.status(400).json({ error: "PATCH requires a full document path" });
-
-    const document_id = segments.pop();
-    const collection_name = segments.join('/');
-
-    try {
-        const current = await pool.query(
-            'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-            [project_id, collection_name, document_id]
-        );
-
-        let finalData = newData;
-        if (current.rows.length > 0) {
-            finalData = { ...current.rows[0].data, ...newData };
-        }
-
-        await pool.query(
-            `INSERT INTO firestore_data (project_id, collection_name, document_id, data) 
-             VALUES ($1, $2, $3, $4) 
-             ON CONFLICT (project_id, collection_name, document_id) 
-             DO UPDATE SET data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
-            [project_id, collection_name, document_id, JSON.stringify(finalData)]
-        );
-
-        // Notify Subscribers (Real-time Room)
-        io.to(`project_${project_id}_${collection_name}`).emit('firestore_update', {
-            type: 'update',
-            collection: collection_name,
-            document_id: document_id,
-            data: finalData
-        });
-
-        trackUsage(project_id, 'write');
-        res.json({ message: "Document Merged", collection_name, document_id });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.delete('/v1/console/projects/:projectId/storage', authenticateToken, (req, res) => {
+    axios.delete(`http://localhost:3500/delete/${req.params.projectId}`, { data: req.body })
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.delete('/v1/firestore/*', authenticateAppToken, async (req, res) => {
-    const fullPath = req.params[0];
-    const segments = fullPath.split('/').filter(s => s.length > 0);
-    const { project_id } = req.app_user;
-
-    if (segments.length === 0) return res.status(400).json({ error: "Invalid path" });
-
-    try {
-        if (segments.length % 2 === 0) {
-            // --- Step 1: Delete Specific Document ---
-            const document_id = segments.pop();
-            const collection_name = segments.join('/');
-
-            await pool.query(
-                'DELETE FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-                [project_id, collection_name, document_id]
-            );
-
-            io.to(`project_${project_id}_${collection_name}`).emit('firestore_update', {
-                type: 'delete_document',
-                collection: collection_name,
-                document_id: document_id
-            });
-
-            res.json({ message: "Document Deleted", collection_name, document_id });
-        } else {
-            // --- Step 2: Delete Entire Collection ---
-            const collection_name = segments.join('/');
-
-            await pool.query(
-                'DELETE FROM firestore_data WHERE project_id = $1 AND collection_name = $2',
-                [project_id, collection_name]
-            );
-
-            io.to(`project_${project_id}_${collection_name}`).emit('firestore_update', {
-                type: 'delete_collection',
-                collection: collection_name
-            });
-
-            res.json({ message: "Entire Collection Deleted", collection_name });
-        }
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.get('/v1/console/projects/:projectId/storage', authenticateToken, (req, res) => {
+    axios.get(`http://localhost:3500/list/${req.params.projectId}`)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
-
-// --- SUGUNA STORAGE API (File Uploads) ---
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        let folderPath = req.body.folder_path || '';
-        const projId = req.params.projectId || (req.app_user ? req.app_user.project_id : 'shared');
-        const projectDir = path.join(uploadDir, String(projId), folderPath);
-        if (!fs.existsSync(projectDir)) {
-            fs.mkdirSync(projectDir, { recursive: true });
-        }
-        cb(null, projectDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 100 * 1024 * 1024 // 100MB limit
-    }
-});
-
-app.post('/v1/storage/upload', authenticateAppToken, upload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
-        const { project_id } = req.app_user;
-        const folder_path = req.body.folder_path || '';
-        const file_name = req.file.filename;
-        const file_type = req.file.mimetype;
-        const file_size = req.file.size;
-
-        const token = require('crypto').randomUUID(); // generate a token format like Firebase
-        const fileUrl = `${req.protocol}://${req.get('host')}/storage/${project_id}/${folder_path ? folder_path + '/' : ''}${file_name}?alt=media&token=${token}`;
-
-        const result = await pool.query(
-            `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [project_id, folder_path, file_name, fileUrl, file_type, file_size]
-        );
-
-        res.json({ message: "File Uploaded Successfully", data: result.rows[0] });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, upload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
-        const { projectId } = req.params;
-        const folder_path = req.body.folder_path || '';
-        const file_name = req.file.filename;
-        const file_type = req.file.mimetype;
-        const file_size = req.file.size;
-
-        const fileUrl = `${req.protocol}://${req.get('host')}/storage/${projectId}/${folder_path ? folder_path + '/' : ''}${file_name}`;
-
-        const result = await pool.query(
-            `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [projectId, folder_path, file_name, fileUrl, file_type, file_size]
-        );
-
-        res.json({ message: "File Uploaded Successfully", data: result.rows[0] });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, async (req, res) => {
-    const { projectId } = req.params;
-    const { folder_path } = req.body;
-    try {
-        // Just insert a dummy record specifying this folder exists so the UI catches it
-        const result = await pool.query(
-            `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
-             VALUES ($1, $2, '', '', 'Folder', 0) RETURNING *`,
-            [projectId, folder_path]
-        );
-        res.json({ message: "Folder Created Successfully", data: result.rows[0] });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/v1/console/projects/:projectId/storage', authenticateToken, async (req, res) => {
-    const { projectId } = req.params;
-    const { ids, folderPaths } = req.body;
-
-    // allow either ids or folderPaths
-    if ((!ids || ids.length === 0) && (!folderPaths || folderPaths.length === 0)) {
-        return res.status(400).json({ error: "No storage items provided to delete" });
-    }
-
-    try {
-        let deletedCount = 0;
-
-        if (ids && ids.length > 0) {
-            const query = `DELETE FROM storage_files WHERE project_id = $1 AND id = ANY($2::int[]) RETURNING *`;
-            const result = await pool.query(query, [projectId, ids]);
-            deletedCount += result.rowCount;
-        }
-
-        if (folderPaths && folderPaths.length > 0) {
-            for (let folderPath of folderPaths) {
-                // Delete the folder itself, or any file inside it
-                const query = `DELETE FROM storage_files WHERE project_id = $1 AND (folder_path = $2 OR folder_path LIKE $3)`;
-                const result = await pool.query(query, [projectId, folderPath, `${folderPath}/%`]);
-                deletedCount += result.rowCount;
-            }
-        }
-
-        res.json({ message: "Deleted successfully", count: deletedCount });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/v1/console/projects/:projectId/storage', authenticateToken, async (req, res) => {
-    const { projectId } = req.params;
-    try {
-        const result = await pool.query(
-            'SELECT * FROM storage_files WHERE project_id = $1 ORDER BY created_at DESC',
-            [projectId]
-        );
-        res.json(result.rows);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// ====================================================
 
 // --- CONSOLE FIRESTORE MANAGEMENT ---
 
@@ -823,136 +534,48 @@ app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, async 
 
 
 // --- SUGUNA HOSTING SYSTEM ---
-const unzipper = require('unzipper');
-const crypto = require('crypto');
 
-const hostingUpload = multer({ dest: 'hosting_temp/' });
+// ====================================================
+// HOSTING PROXY (suguna-hosting: 3600)
+// ====================================================
+// 1. Deploy Site (Proxy with Multipart/form-data support)
+app.use('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, createProxyMiddleware({
+    target: 'http://localhost:3600',
+    pathRewrite: { '^/v1/hosting/deploy': '/deploy' },
+    changeOrigin: true
+}));
 
-app.post('/v1/hosting/deploy/:projectId/:siteId', authenticateToken, hostingUpload.single('hosting_files'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: "No zip file provided" });
-
-        const { projectId, siteId } = req.params;
-        const siteDir = path.join(__dirname, 'hosting_sites', projectId, siteId);
-
-        // Get or Create Secure URL ID
-        let secureId;
-        const siteResult = await pool.query('SELECT secure_id FROM hosting_sites WHERE project_id = $1 AND site_name = $2', [projectId, siteId]);
-
-        if (siteResult.rows.length > 0) {
-            secureId = siteResult.rows[0].secure_id;
-            // Update timestamp on re-deploy
-            await pool.query('UPDATE hosting_sites SET updated_at = CURRENT_TIMESTAMP WHERE project_id = $1 AND site_name = $2', [projectId, siteId]);
-        } else {
-            secureId = crypto.randomBytes(8).toString('hex'); // Generate 16char secure ID
-            await pool.query('INSERT INTO hosting_sites (project_id, site_name, secure_id) VALUES ($1, $2, $3)', [projectId, siteId, secureId]);
-        }
-
-        // 1. Create clean directory
-        if (fs.existsSync(siteDir)) {
-            fs.rmSync(siteDir, { recursive: true, force: true });
-        }
-        fs.mkdirSync(siteDir, { recursive: true });
-
-        // 2. Extract ZIP
-        await fs.createReadStream(req.file.path)
-            .pipe(unzipper.Extract({ path: siteDir }))
-            .promise();
-
-        // 3. Delete temporary zip
-        fs.unlinkSync(req.file.path);
-
-        const liveUrl = `https://api.suguna.co/site/${projectId}/${siteId}/${secureId}`;
-
-        res.json({ message: "Hosting Deploy Success", live_url: liveUrl });
-    } catch (e) {
-        console.error("Hosting Deploy Error:", e);
-        res.status(500).json({ error: "Hosting deployment failed" });
-    }
-});
-
-const renderHostingError = (code, title, message, subtext) => `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${code} ${title} | Suguna Hosting</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
-    <style>
-        body { margin: 0; font-family: 'Outfit', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; }
-        .container { max-width: 500px; padding: 2rem; }
-        .icon { font-size: 80px; margin-bottom: 1.5rem; animation: pulse 2s infinite; }
-        .badge { display: inline-block; background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 4px 12px; rounded-radius: 6px; font-weight: bold; font-size: 0.8rem; margin-bottom: 1rem; border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 6px; }
-        h1 { font-size: 2.5rem; font-weight: 900; margin: 0; background: linear-gradient(135deg, #a78bfa, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        p { color: #94a3b8; font-size: 1.1rem; margin-top: 1rem; line-height: 1.6; }
-        .sub { margin-top: 2rem; color: #475569; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; font-family: monospace; }
-        .reason-box { margin-top: 1.5rem; padding: 10px; background: rgba(239, 68, 68, 0.05); border: 1px border-style: dashed border-color: rgba(239, 68, 68, 0.2); border-radius: 8px; font-family: monospace; font-size: 0.75rem; color: #f87171; display: inline-block; padding: 6px 15px; border: 1px dashed rgba(239, 68, 68, 0.3); }
-        @keyframes pulse { 0% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.8; transform: scale(1); } }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="badge">HTTP ${code} RESPONSE</div>
-        <div class="icon">🕸️</div>
-        <h1>${title}</h1>
-        <p>${message}</p>
-        <div class="reason-box">TECHNICAL REASON: ${subtext}</div>
-        <div class="sub">SugunaBase Cloud Edge &bull; Hosting Engine v1</div>
-    </div>
-</body>
-</html>`;
-
-// Serve Hosted Sites dynamically
-app.use('/site/:projectId/:siteId/:secureId', async (req, res, next) => {
+// 2. Serve Sites Dynamically
+app.use('/site/:projectId/:siteId/:secureId', (req, res, next) => {
+    // We rewrite the URL internally for the hosting service
     const { projectId, siteId, secureId } = req.params;
+    req.url = `/serve/${projectId}/${siteId}/${secureId}${req.url.split(secureId)[1] || ''}`;
+    next();
+}, createProxyMiddleware({
+    target: 'http://localhost:3600',
+    changeOrigin: true
+}));
 
-    try {
-        // Double check: 1. Project is Active, 2. Site is Active, 3. Secure ID matches
-        const statusQuery = `
-            SELECT h.secure_id, h.is_active as site_active, p.is_active as project_active
-            FROM hosting_sites h
-            JOIN projects p ON h.project_id = p.id
-            WHERE p.id = $1 AND h.site_name = $2
-        `;
-        const check = await pool.query(statusQuery, [projectId, siteId]);
-
-        if (check.rows.length === 0) {
-            return res.status(404).send(renderHostingError(404, 'Site Not Found', 'The requested website does not exist in our global registry.', 'GLOBAL_SEARCH_FAILED'));
-        }
-
-        const { secure_id, site_active, project_active } = check.rows[0];
-
-        if (!project_active) {
-            return res.status(403).send(renderHostingError(403, 'Project Suspended', 'This project has been temporarily disabled by the administrator.', 'PROJECT_INACTIVE_BLOCK'));
-        }
-
-        if (!site_active) {
-            return res.status(403).send(renderHostingError(403, 'Site Inactive', 'The developer has temporarily taken this site offline.', 'USER_REQUESTED_DEACTIVATION'));
-        }
-
-        if (secure_id !== secureId) {
-            return res.status(403).send(renderHostingError(403, 'Access Denied', 'Security mismatch. Your connection lack the required secure credentials.', 'SECURITY_HASH_MISMATCH'));
-        }
-
-        const sitePath = path.join(__dirname, 'hosting_sites', projectId, siteId);
-        if (!fs.existsSync(sitePath)) {
-            return res.status(404).send(renderHostingError(404, 'Content Missing', 'The deployment assets for this site could not be found.', 'DEPLOYMENT_FILES_NOT_DISCOVERED'));
-        }
-
-        // Serve static files, but if not found, show branded 404
-        express.static(sitePath)(req, res, () => {
-            res.status(404).send(renderHostingError(404, 'Page Not Found', 'The specific page or resource you are looking for does not exist on this site.', 'FILE_NOT_FOUND_IN_SITE'));
-        });
-    } catch (e) {
-        res.status(500).send('Internal Server Error');
-    }
-});
-
-// Catch invalid/short hosting URLs (e.g., /site, /site/15, etc.)
+// 3. Catch invalid/short hosting URLs
 app.all(['/site', '/site/*'], (req, res) => {
-    res.status(400).send(renderHostingError(400, 'Invalid URL', 'The hosting link is incomplete. Please use the full URL provided in your dashboard.', 'URL_STRUCTURE_INVALID'));
+    res.status(400).send("Invalid Hosting URL structure. Use the full URL from your dashboard.");
 });
+// ====================================================
+// LOGS PROXY (suguna-logs: 3700)
+// ====================================================
+app.use('/v1/logs', authenticateToken, createProxyMiddleware({
+    target: 'http://localhost:3700',
+    pathRewrite: { '^/v1/logs': '/' },
+    changeOrigin: true
+}));
+
+// Internal Log Helper
+const logToSystem = (projectId, service, level, message) => {
+    axios.post('http://localhost:3700/ingest', { projectId, service, level, message })
+        .catch(e => console.error("Log Ingestion Failed:", e.message));
+};
+
+app.get('/health', (req, res) => res.json({ status: 'UP', service: 'Suguna Gateway' }));
 
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
 
@@ -991,49 +614,24 @@ app.get('/v1/internal/projects/:projectId/status', async (req, res) => {
 // --- PROTECTED ROUTES (Require Login) ---
 
 // Get Hosting Sites for a Project
-app.get('/v1/console/projects/:projectId/hosting/sites', authenticateToken, async (req, res) => {
-    try {
-        const result = await pool.query(
-            'SELECT * FROM hosting_sites WHERE project_id = $1 ORDER BY created_at DESC',
-            [req.params.projectId]
-        );
-        res.json({ sites: result.rows });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+app.get('/v1/console/projects/:projectId/hosting/sites', authenticateToken, (req, res) => {
+    axios.get(`http://localhost:3600/sites/${req.params.projectId}`)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 // Toggle Hosting Site Status (Active/Inactive)
-app.post('/v1/console/projects/:projectId/hosting/sites/:siteId/toggle', authenticateToken, async (req, res) => {
-    const { projectId, siteId } = req.params;
-    const { active } = req.body;
-    try {
-        await pool.query(
-            'UPDATE hosting_sites SET is_active = $1 WHERE project_id = $2 AND id = $3',
-            [active, projectId, siteId]
-        );
-        res.json({ success: true, message: `Site ${active ? 'activated' : 'deactivated'} successfully` });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.post('/v1/console/projects/:projectId/hosting/sites/:siteId/toggle', authenticateToken, (req, res) => {
+    axios.post(`http://localhost:3600/sites/${req.params.projectId}/${req.params.siteId}/toggle`, req.body)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 // Delete Hosting Site
-app.delete('/v1/console/projects/:projectId/hosting/sites/:siteId', authenticateToken, async (req, res) => {
-    const { projectId, siteId } = req.params;
-    try {
-        // Get site name first to delete files
-        const siteResult = await pool.query('SELECT site_name FROM hosting_sites WHERE project_id = $1 AND id = $2', [projectId, siteId]);
-        if (siteResult.rows.length > 0) {
-            const siteName = siteResult.rows[0].site_name;
-            const siteDir = path.join(__dirname, 'hosting_sites', projectId, siteName);
-            if (fs.existsSync(siteDir)) {
-                fs.rmSync(siteDir, { recursive: true, force: true });
-            }
-            await pool.query('DELETE FROM hosting_sites WHERE id = $1', [siteId]);
-            res.json({ success: true, message: "Site deleted permanently" });
-        } else {
-            res.status(404).json({ error: "Site not found" });
-        }
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.delete('/v1/console/projects/:projectId/hosting/sites/:siteId', authenticateToken, (req, res) => {
+    axios.delete(`http://localhost:3600/sites/${req.params.projectId}/${req.params.siteId}`)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 // Get User's Projects
@@ -1404,6 +1002,46 @@ app.post('/v1/internal/functions/logs', async (req, res) => {
 });
 
 // Update Function Schedule (Cron)
+// ====================================================
+// CLOUD MESSAGING PROXY (Standalone Microservice)
+// ====================================================
+app.use('/v1/messaging/register', authenticateAppToken, (req, res) => {
+    const { fcm_token, device_id, platform } = req.body;
+    const { app_user_id, project_id } = req.app_user;
+
+    axios.post('http://localhost:3200/register', {
+        project_id, app_user_id, fcm_token, device_id, platform
+    }).then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+});
+
+app.put('/v1/console/projects/:projectId/messaging/config', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    const { serviceAccount } = req.body;
+    try {
+        await pool.query('UPDATE projects SET fcm_service_account = $1 WHERE id = $2', [JSON.stringify(serviceAccount), projectId]);
+        await axios.post(`http://localhost:3200/config/reset/${projectId}`).catch(() => { });
+        res.json({ message: "Messaging configuration updated" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/v1/console/projects/:projectId/messaging/send', authenticateToken, (req, res) => {
+    const { projectId } = req.params;
+    axios.post(`http://localhost:3200/send/${projectId}`, req.body)
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+});
+
+app.get('/v1/console/projects/:projectId/messaging/history', authenticateToken, async (req, res) => {
+    const { projectId } = req.params;
+    try {
+        const history = await pool.query('SELECT * FROM notifications_history WHERE project_id = $1 ORDER BY created_at DESC LIMIT 50', [projectId]);
+        const stats = await pool.query('SELECT COUNT(*) as total_devices FROM messaging_tokens WHERE project_id = $1', [projectId]);
+        res.json({ history: history.rows, total_devices: parseInt(stats.rows[0].total_devices) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// ====================================================
+
 app.post('/v1/console/projects/:projectId/functions/:name/schedule', authenticateToken, async (req, res) => {
     const { projectId, name } = req.params;
     const { cronString } = req.body;

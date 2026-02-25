@@ -148,4 +148,22 @@ class UsageExample {
             }
         )
     }
+
+    /**
+     * Suguna Cloud Messaging (Push Notifications)
+     */
+    fun messagingWorkflows() {
+        val messaging = co.suguna.sdk.messaging.SugunaMessaging.getInstance()
+
+        // 1. Get Device Token
+        messaging.getToken { token ->
+            Log.d("SugunaSCM", "My device token: $token")
+        }
+
+        // 2. Subscribe to Topics
+        messaging.subscribeToTopic("global_announcements")
+
+        // 3. To send messages, use the SugunaBase Console 
+        // OR call the backend API: POST /v1/console/projects/{id}/messaging/send
+    }
 }

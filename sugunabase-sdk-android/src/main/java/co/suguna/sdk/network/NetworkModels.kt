@@ -41,6 +41,12 @@ data class CastTokenResponse(
     val token: String
 )
 
+data class MessagingTokenRequest(
+    val fcm_token: String,
+    val device_id: String? = null,
+    val platform: String = "android"
+)
+
 data class FirestoreDocument(
     val document_id: String,
     val data: Map<String, Any>

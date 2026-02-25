@@ -16,6 +16,8 @@ const FUNCS_DIR = path.join(__dirname, 'functions');
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
+app.get('/health', (req, res) => res.json({ status: 'UP', service: 'Suguna Functions Hub' }));
+
 // Ensure directories exist
 if (!fs.existsSync(FUNCS_DIR)) fs.mkdirSync(FUNCS_DIR, { recursive: true });
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });

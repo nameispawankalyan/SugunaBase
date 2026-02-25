@@ -68,4 +68,10 @@ interface SugunaBaseApiInterface {
         @Path("functionName") functionName: String,
         @Body data: Map<String, Any>
     ): Call<Any>
+    
+    @POST("v1/messaging/register")
+    fun registerMessagingToken(
+        @Header("Authorization") token: String,
+        @Body request: MessagingTokenRequest
+    ): Call<Any>
 }
