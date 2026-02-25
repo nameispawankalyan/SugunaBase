@@ -8,5 +8,6 @@ build/
 package-lock.json
 key.pem
 cert.pem
-out/
+logs/
+!platform/app/admin/logs/page.tsx
 Release/
