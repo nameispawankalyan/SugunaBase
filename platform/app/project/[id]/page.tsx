@@ -381,10 +381,16 @@ export default function ProjectDetails() {
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2">Package Name</label>
+                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2">
+                                                        {newAppPlatform === 'ios' ? 'Bundle ID' : newAppPlatform === 'web' ? 'App Nickname' : 'Package Name'}
+                                                    </label>
                                                     <input
                                                         type="text"
-                                                        placeholder="com.example.app"
+                                                        placeholder={
+                                                            newAppPlatform === 'ios' ? "com.example.app.ios" :
+                                                                newAppPlatform === 'web' ? "my-web-app" :
+                                                                    "com.example.app"
+                                                        }
                                                         className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-blue-500/50 outline-none transition-all placeholder:text-gray-700 font-bold"
                                                         value={newPackageName}
                                                         onChange={(e) => setNewPackageName(e.target.value)}
