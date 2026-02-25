@@ -65,8 +65,19 @@ const authenticateToken = (req, res, next) => {
 
     if (!token) return res.status(401).json({ error: "Access Denied" });
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, JWT_SECRET, async (err, user) => {
         if (err) return res.status(403).json({ error: "Invalid Token" });
+
+        // Check if user is still active in DB
+        try {
+            const check = await pool.query('SELECT is_active FROM users WHERE id = $1', [user.id]);
+            if (check.rows.length === 0 || !check.rows[0].is_active) {
+                return res.status(403).json({ error: "Account Deactivated", code: 'ACCOUNT_DISABLED' });
+            }
+        } catch (e) {
+            return res.status(500).json({ error: "Internal Auth Error" });
+        }
+
         req.user = user;
         next();
     });
@@ -94,11 +105,15 @@ const initDB = async () => {
                 email VARCHAR(100) UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 role VARCHAR(20) DEFAULT 'developer',
+                is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        // Migration for role
-        try { await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT \'developer\';'); } catch (e) { }
+        // Migration for user features
+        try {
+            await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT \'developer\';');
+            await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;');
+        } catch (e) { }
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS projects (
@@ -109,10 +124,11 @@ const initDB = async () => {
                 package_name VARCHAR(255),
                 google_sign_in_enabled BOOLEAN DEFAULT FALSE,
                 google_client_id VARCHAR(255),
+                is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        // Add columns if they don't exist (Migration for existing DBs)
+        // Migration for project features
         try {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_sign_in_enabled BOOLEAN DEFAULT FALSE;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_client_id VARCHAR(255);`);
@@ -394,10 +410,6 @@ app.post('/v1/auth/app-login', (req, res) => {
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
-// ====================================================
-
-
-// --- AUTH ROUTES FOR APPS (End Users) ---
 
 // App User Login / Signup (Google / Email)
 // --- SUGUNA CAST TOKEN PROXY ---
@@ -427,10 +439,27 @@ app.post('/v1/cast/get-token', async (req, res) => {
 });
 
 
+// Middleware to check if a project is active
+const verifyProjectActive = async (req, res, next) => {
+    const projectId = req.params.projectId || req.params.id || req.headers['x-project-id'];
+    if (!projectId) return next();
+
+    try {
+        const result = await pool.query('SELECT is_active FROM projects WHERE id = $1', [projectId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+        if (!result.rows[0].is_active) {
+            return res.status(403).json({ error: "This project has been deactivated by the administrator." });
+        }
+        next();
+    } catch (e) {
+        next();
+    }
+};
+
 // ====================================================
 // FIRESTORE PROXY (suguna-firestore: 3400)
 // ====================================================
-app.all('/v1/firestore/*', authenticateAppToken, (req, res) => {
+app.all('/v1/firestore/*', authenticateAppToken, verifyProjectActive, (req, res) => {
     const { project_id } = req.app_user;
     const fullPath = req.params[0];
 
@@ -457,7 +486,7 @@ app.use('/storage', createProxyMiddleware({
 }));
 
 // Handle App Uploads
-app.post('/v1/storage/upload', authenticateAppToken, (req, res, next) => {
+app.post('/v1/storage/upload', authenticateAppToken, verifyProjectActive, (req, res, next) => {
     // Inject headers for the storage service to consume
     req.headers['x-project-id'] = req.app_user.project_id;
     req.headers['x-folder-path'] = req.body.folder_path || '';
@@ -1053,7 +1082,7 @@ app.post('/v1/internal/functions/logs', async (req, res) => {
 // ====================================================
 // CLOUD MESSAGING PROXY (Standalone Microservice)
 // ====================================================
-app.use('/v1/messaging/register', authenticateAppToken, (req, res) => {
+app.use('/v1/messaging/register', authenticateAppToken, verifyProjectActive, (req, res) => {
     const { fcm_token, device_id, platform } = req.body;
     const { app_user_id, project_id } = req.app_user;
 
@@ -1108,5 +1137,63 @@ app.post('/v1/console/projects/:projectId/functions/:name/schedule', authenticat
         res.json({ success: true, message: "Schedule updated successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+const authenticateAdmin = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ error: "Access Denied" });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err || user.role !== 'admin') {
+            return res.status(403).json({ error: "Admin access only" });
+        }
+        req.user = user;
+        next();
+    });
+};
+
+// --- ADMIN API ---
+
+// List all developers with project counts
+app.get('/v1/admin/users', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at,
+            (SELECT COUNT(*) FROM projects WHERE user_id = u.id) as project_count
+            FROM users u
+            WHERE u.role != 'admin'
+            ORDER BY u.created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Toggle user status
+app.put('/v1/admin/users/:id/status', authenticateAdmin, async (req, res) => {
+    const { is_active } = req.body;
+    try {
+        await pool.query('UPDATE users SET is_active = $1 WHERE id = $2', [is_active, req.params.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// List projects for a specific user
+app.get('/v1/admin/users/:id/projects', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC', [req.params.id]);
+        res.json(result.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Toggle project status
+app.put('/v1/admin/projects/:id/status', authenticateAdmin, async (req, res) => {
+    const { is_active } = req.body;
+    try {
+        await pool.query('UPDATE projects SET is_active = $1 WHERE id = $2', [is_active, req.params.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- END ADMIN API ---
 
 server.listen(port, () => console.log(`🚀 SugunaBase Server running on port ${port} `));

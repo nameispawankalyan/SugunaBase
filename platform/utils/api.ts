@@ -1,20 +1,33 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.suguna.co/v1'; // Backend API URL
+const API_BASE_URL = 'https://api.suguna.co/v1';
 
 export const api = {
     getHeaders: () => {
-        const headers: any = { 'Content-Type': 'application/json' };
-        if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('token');
-            if (token) headers['Authorization'] = `Bearer ${token}`; // Authorization: Bearer <token>
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        return {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        };
+    },
+
+    handleResponse: async (res: Response) => {
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            // If account is deactivated, force logout
+            if (errorData.code === 'ACCOUNT_DISABLED') {
+                if (typeof window !== 'undefined') {
+                    localStorage.clear();
+                    window.location.href = '/login?error=deactivated';
+                }
+            }
+            throw new Error(errorData.error || `API Error: ${res.statusText}`);
         }
-        return headers;
+        return await res.json();
     },
 
     get: async (endpoint: string) => {
         try {
             const res = await fetch(`${API_BASE_URL}${endpoint}`, { headers: api.getHeaders() });
-            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
-            return await res.json();
+            return await api.handleResponse(res);
         } catch (error) {
             console.error("API GET Error:", error);
             throw error;
@@ -28,8 +41,7 @@ export const api = {
                 headers: api.getHeaders(),
                 body: JSON.stringify(data),
             });
-            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
-            return await res.json();
+            return await api.handleResponse(res);
         } catch (error) {
             console.error("API POST Error:", error);
             throw error;
@@ -43,8 +55,7 @@ export const api = {
                 headers: api.getHeaders(),
                 body: JSON.stringify(data),
             });
-            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
-            return await res.json();
+            return await api.handleResponse(res);
         } catch (error) {
             console.error("API PUT Error:", error);
             throw error;
@@ -57,8 +68,7 @@ export const api = {
                 method: 'DELETE',
                 headers: api.getHeaders(),
             });
-            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
-            return await res.json();
+            return await api.handleResponse(res);
         } catch (error) {
             console.error("API DELETE Error:", error);
             throw error;
@@ -66,17 +76,14 @@ export const api = {
     }
 };
 
-export const CAST_API_URL = 'https://cast.suguna.co';
-
-export const castApi = {
-    get: async (endpoint: string) => {
-        try {
-            const res = await fetch(`${CAST_API_URL}${endpoint}`);
-            if (!res.ok) throw new Error(`Cast API Error: ${res.statusText}`);
-            return await res.json();
-        } catch (error) {
-            console.error("Cast API Error:", error);
-            throw error;
-        }
+export const SugunaCastAPI = {
+    // Standard Cast API remains the same as it uses a different base URL usually
+    getToken: async (data: any) => {
+        const res = await fetch(`${API_BASE_URL}/cast/get-token`, {
+            method: 'POST',
+            headers: api.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return await api.handleResponse(res);
     }
 };

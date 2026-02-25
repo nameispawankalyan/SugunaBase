@@ -50,6 +50,11 @@ app.post('/login', async (req, res) => {
         }
 
         const user = result.rows[0];
+        if (!user.is_active) {
+            console.warn(`[AUTH] Login blocked for deactivated account: ${email}`);
+            return res.status(403).json({ error: 'Your account has been deactivated. Please contact admin.' });
+        }
+
         const match = await bcrypt.compare(password, user.password_hash);
         if (!match) {
             console.warn(`[AUTH] Password mismatch for: ${email}`);
