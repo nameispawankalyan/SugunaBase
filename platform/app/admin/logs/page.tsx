@@ -28,10 +28,12 @@ export default function GlobalLogsPage() {
     const [filter, setFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [authorized, setAuthorized] = useState(false);
+    const [mounted, setMounted] = useState(false);
     const socketRef = useRef<Socket | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        setMounted(true);
         const checkAuth = async () => {
             try {
                 const user = await api.get('/me');
@@ -84,28 +86,34 @@ export default function GlobalLogsPage() {
         };
     }, [authorized]);
 
-    if (!authorized) return (
+    useEffect(() => {
+        if (mounted && !isPaused && scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [logs, isPaused, mounted]);
+
+    if (!mounted || !authorized) return (
         <div className="h-screen flex items-center justify-center bg-[#030708] text-white">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
         </div>
     );
 
-    useEffect(() => {
-        if (!isPaused && scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    }, [logs, isPaused]);
+    const filteredLogs = Array.isArray(logs) ? logs.filter(log => {
+        if (!log) return false;
+        const serviceName = (log.service_name || '').toLowerCase();
+        const message = (log.message || '').toLowerCase();
+        const projectId = (log.project_id || '').toLowerCase();
+        const searchTerm = (search || '').toLowerCase();
 
-    const filteredLogs = logs.filter(log => {
-        const matchesFilter = filter === 'all' || log.service_name.toLowerCase().includes(filter.toLowerCase());
-        const matchesSearch =
-            log.message.toLowerCase().includes(search.toLowerCase()) ||
-            log.project_id.toLowerCase().includes(search.toLowerCase());
+        const matchesFilter = filter === 'all' || serviceName.includes(filter.toLowerCase());
+        const matchesSearch = message.includes(searchTerm) || projectId.includes(searchTerm);
+
         return matchesFilter && matchesSearch;
-    });
+    }) : [];
 
     const getLevelColor = (level: string) => {
-        switch (level.toLowerCase()) {
+        const l = (level || 'info').toLowerCase();
+        switch (l) {
             case 'error': return 'text-rose-400 font-bold';
             case 'warn': return 'text-amber-400 font-bold';
             default: return 'text-emerald-400';
@@ -205,10 +213,16 @@ export default function GlobalLogsPage() {
                         </div>
                     ) : (
                         <div className="space-y-1.5 pb-20">
-                            {filteredLogs.map((log) => (
-                                <div key={log.id} className="flex gap-6 py-2 border-b border-white/[0.02] hover:bg-white/[0.03] transition-all group">
+                            {filteredLogs.map((log, index) => (
+                                <div key={log.id || `log-${index}`} className="flex gap-6 py-2 border-b border-white/[0.02] hover:bg-white/[0.03] transition-all group">
                                     <span className="text-gray-600 whitespace-nowrap min-w-[120px] font-bold">
-                                        {log.created_at ? new Date(log.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '00:00:00'}
+                                        {(() => {
+                                            try {
+                                                return log.created_at ? new Date(log.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '---';
+                                            } catch (e) {
+                                                return '---';
+                                            }
+                                        })()}
                                     </span>
                                     <span className="text-orange-900/60 font-black min-w-[140px] truncate uppercase text-[11px] tracking-tighter">
                                         ID: {log.project_id || 'system'}

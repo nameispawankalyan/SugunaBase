@@ -36,6 +36,7 @@ export default function GlobalHealthPage() {
     const [statuses, setStatuses] = useState<Record<string, any>>({});
     const [loading, setLoading] = useState(true);
     const [authorized, setAuthorized] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
     const checkHealth = async () => {
         setLoading(true);
@@ -49,6 +50,7 @@ export default function GlobalHealthPage() {
     };
 
     useEffect(() => {
+        setMounted(true);
         const checkAuth = async () => {
             try {
                 const user = await api.get('/me');
@@ -72,7 +74,7 @@ export default function GlobalHealthPage() {
         return () => clearInterval(interval);
     }, [authorized]);
 
-    if (!authorized) return (
+    if (!mounted || !authorized) return (
         <div className="h-screen flex items-center justify-center bg-gray-50">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
         </div>

@@ -33,12 +33,13 @@ export default function AdminUsersPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [authorized, setAuthorized] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
     const fetchUsers = async () => {
         setLoading(true);
         try {
             const data = await api.get('/admin/users');
-            setUsers(data);
+            setUsers(Array.isArray(data) ? data : []);
         } catch (e) {
             console.error("Failed to fetch admin users:", e);
         }
@@ -55,6 +56,7 @@ export default function AdminUsersPage() {
     };
 
     useEffect(() => {
+        setMounted(true);
         const checkAuth = async () => {
             try {
                 const user = await api.get('/me');
@@ -65,13 +67,18 @@ export default function AdminUsersPage() {
                 setAuthorized(true);
                 fetchUsers();
             } catch (e) {
+                console.error("Auth check failed:", e);
                 window.location.href = '/login';
             }
         };
         checkAuth();
     }, []);
 
-    if (!authorized) return null;
+    if (!mounted || !authorized) return (
+        <div className="h-screen flex items-center justify-center bg-gray-50">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+    );
 
     const filteredUsers = users.filter(u =>
         u.email.toLowerCase().includes(search.toLowerCase()) ||
