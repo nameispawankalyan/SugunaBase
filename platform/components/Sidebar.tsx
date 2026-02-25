@@ -43,12 +43,6 @@ const Sidebar = () => {
 
     const token = localStorage.getItem('token');
 
-    // Auth Guard: If no token and not on public pages, redirect to login
-    if (!token && !['/', '/login', '/signup'].includes(pathname)) {
-      window.location.replace('/login');
-      return;
-    }
-
     const fetchProfile = async () => {
       try {
         const data = await api.get('/me');
@@ -62,13 +56,6 @@ const Sidebar = () => {
         } catch (err) { }
         setFullUser(user);
         setIsAdmin(user.role === 'admin');
-
-        // If even local storage fails or is empty, and we're not on public pages
-        if (!user || !(user as any).id) {
-          if (!['/', '/login', '/signup'].includes(pathname)) {
-            window.location.replace('/login');
-          }
-        }
       }
     };
     if (token) fetchProfile();

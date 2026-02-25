@@ -12,11 +12,11 @@ export const api = {
     handleResponse: async (res: Response) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            // If account is deactivated, force logout
-            if (data.code === 'ACCOUNT_DISABLED') {
-                if (typeof window !== 'undefined') {
+            // If account is deactivated or unauthorized, force logout
+            if (data.code === 'ACCOUNT_DISABLED' || res.status === 401) {
+                if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
                     localStorage.clear();
-                    window.location.href = '/login?error=deactivated';
+                    window.location.href = '/login?error=' + (data.code || 'unauthorized');
                 }
             }
             throw new Error(data.error || `API Error: ${res.statusText}`);
