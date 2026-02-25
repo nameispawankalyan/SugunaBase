@@ -35,7 +35,7 @@ app.post('/signup', async (req, res) => {
             [email, hashedPassword, name]
         );
         const token = jwt.sign({ id: result.rows[0].id }, JWT_SECRET, { expiresIn: '1d' });
-        res.status(201).json({ user: result.rows[0], token });
+        res.status(201).json({ user: { id: result.rows[0].id, email: result.rows[0].email, name: result.rows[0].name, role: result.rows[0].role }, token });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -58,7 +58,7 @@ app.post('/login', async (req, res) => {
 
         console.log(`[AUTH] Login Success: ${email}`);
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
-        res.json({ user: { id: user.id, email: user.email, name: user.name }, token });
+        res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role }, token });
     } catch (e) {
         console.error(`[AUTH] Login Crash: ${e.message}`);
         res.status(500).json({ error: 'Internal Auth Error: ' + e.message });

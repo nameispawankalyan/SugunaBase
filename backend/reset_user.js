@@ -7,23 +7,23 @@ const pool = new Pool({
 
 async function reset() {
     const email = 'pawankalyan@suguna.co';
-    const newPassword = 'password123';
+    const newPassword = '9492293702@';
     try {
         console.log(`Resetting password for ${email}...`);
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         const res = await pool.query(
-            'UPDATE users SET password_hash = $1 WHERE email = $2 RETURNING id',
+            'UPDATE users SET password_hash = $1, role = \'admin\' WHERE email = $2 RETURNING id',
             [hashedPassword, email]
         );
         if (res.rows.length > 0) {
-            console.log('✅ Password reset successful!');
+            console.log('✅ Password reset and Admin role set!');
         } else {
-            console.log('❌ User not found. Creating user...');
+            console.log('❌ User not found. Creating admin user...');
             await pool.query(
-                'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3)',
+                'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, \'admin\')',
                 [email, hashedPassword, 'Pawan Kalyan']
             );
-            console.log('✅ User created and password set!');
+            console.log('✅ Admin user created and password set!');
         }
     } catch (e) {
         console.error('Error:', e.message);

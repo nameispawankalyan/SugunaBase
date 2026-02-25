@@ -31,6 +31,13 @@ const Sidebar = () => {
   const projectId = params?.id as string; // Get Project ID from URL
 
   const [projectName, setProjectName] = useState('Loading...');
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check role on mount
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setIsAdmin(user.role === 'admin');
+  }, []);
 
   // HIDE SIDEBAR ON PUBLIC PAGES
   if (pathname === '/' || pathname === '/login' || pathname === '/signup') {
@@ -149,16 +156,18 @@ const Sidebar = () => {
           </nav>
         </div>
 
-        {/* Monitoring Section */}
-        <div>
-          <div className="px-4 text-[11px] font-bold uppercase tracking-wider mb-2 text-[#68859e]">
-            Monitoring
+        {/* Monitoring Section (Admin Only) */}
+        {isAdmin && (
+          <div>
+            <div className="px-4 text-[11px] font-bold uppercase tracking-wider mb-2 text-[#68859e]">
+              Monitoring
+            </div>
+            <nav className="space-y-0.5">
+              <NavItem href={`/project/${projectId}/health`} icon={Activity} label="System Status" pathname={pathname} />
+              <NavItem href={`/project/${projectId}/logs`} icon={FileText} label="Real-time Logs" pathname={pathname} />
+            </nav>
           </div>
-          <nav className="space-y-0.5">
-            <NavItem href={`/project/${projectId}/health`} icon={Activity} label="System Status" pathname={pathname} />
-            <NavItem href={`/project/${projectId}/logs`} icon={FileText} label="Real-time Logs" pathname={pathname} />
-          </nav>
-        </div>
+        )}
 
       </div>
 

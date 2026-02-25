@@ -93,9 +93,13 @@ const initDB = async () => {
                 name VARCHAR(100),
                 email VARCHAR(100) UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                role VARCHAR(20) DEFAULT 'developer',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // Migration for role
+        try { await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT \'developer\';'); } catch (e) { }
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS projects (
                 id SERIAL PRIMARY KEY,
