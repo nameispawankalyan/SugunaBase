@@ -35,24 +35,36 @@ export default function SugunaCastPage({ params }: { params: Promise<{ id: strin
 
     const fetchData = async () => {
         try {
-            const [statsRes, roomsRes, historyRes, projectRes] = await Promise.all([
-                castApi.get(`/api/stats/${id}`),
-                castApi.get(`/api/rooms/${id}`),
-                castApi.get(`/api/history/${id}`),
-                api.get(`/projects/${id}`)
+            // Fetch project details first and independently to ensure credentials always load
+            const projectRes = await api.get(`/projects/${id}`).catch(err => {
+                console.error("Failed to fetch project details:", err);
+                return null;
+            });
+
+            if (projectRes) {
+                setProjectDetails(projectRes);
+            }
+
+            // Fetch cast-specific data (might fail if media server is down)
+            const [statsRes, roomsRes, historyRes] = await Promise.all([
+                castApi.get(`/api/stats/${id}`).catch(() => null),
+                castApi.get(`/api/rooms/${id}`).catch(() => []),
+                castApi.get(`/api/history/${id}`).catch(() => [])
             ]);
 
-            setStats({
-                totalCalls: statsRes?.totalCalls || 0,
-                totalMinutes: (statsRes?.totalCalls || 0) * 12,
-                activeParticipants: statsRes?.activeParticipants || 0,
-                successRate: statsRes?.successRate || '100%'
-            });
+            if (statsRes) {
+                setStats({
+                    totalCalls: statsRes.totalCalls || 0,
+                    totalMinutes: (statsRes.totalCalls || 0) * 12,
+                    activeParticipants: statsRes.activeParticipants || 0,
+                    successRate: statsRes.successRate || '100%'
+                });
+            }
+
             setLiveRooms(roomsRes || []);
             setCallHistory(historyRes || []);
-            setProjectDetails(projectRes);
         } catch (error) {
-            console.error('Failed to fetch cast data:', error);
+            console.error('Failed to update cast page data:', error);
         } finally {
             setLoading(false);
         }

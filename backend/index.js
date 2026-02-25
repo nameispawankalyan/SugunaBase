@@ -512,6 +512,17 @@ app.post('/v1/cast/get-token', async (req, res) => {
     }
 });
 
+// Cast Dashboard Proxy
+app.get('/v1/cast/api/*', authenticateToken, async (req, res) => {
+    try {
+        const path = req.params[0];
+        const response = await axios.get(`http://127.0.0.1:3100/api/${path}`);
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: 'Cast Server Unreachable' });
+    }
+});
+
 
 
 // ====================================================
