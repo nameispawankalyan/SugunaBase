@@ -45,7 +45,7 @@ app.post('/ingest', async (req, res) => {
     }
 });
 
-// 2. Fetch History
+// 2. Fetch History (Specific Project)
 app.get('/history/:projectId', async (req, res) => {
     const { projectId } = req.params;
     const limit = req.query.limit || 100;
@@ -61,13 +61,32 @@ app.get('/history/:projectId', async (req, res) => {
     }
 });
 
+// 3. Fetch All Logs (Global Admin)
+app.get('/history/all/stream', async (req, res) => {
+    const limit = req.query.limit || 200;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM system_logs ORDER BY created_at DESC LIMIT $2',
+            [limit]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Socket.io Connection
 io.on('connection', (socket) => {
     console.log('Log Viewer Connected:', socket.id);
 
     socket.on('subscribe', (projectId) => {
-        socket.join(`project_${projectId}`);
-        console.log(`Socket ${socket.id} subscribed to logs for project: ${projectId}`);
+        if (projectId === 'admin_global') {
+            socket.join('admin_logs');
+            console.log(`🛡️ Admin Socket ${socket.id} subscribed to ALL logs`);
+        } else {
+            socket.join(`project_${projectId}`);
+            console.log(`Socket ${socket.id} subscribed to logs for project: ${projectId}`);
+        }
     });
 
     socket.on('disconnect', () => {

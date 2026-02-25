@@ -101,8 +101,8 @@ const Sidebar = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-2">
-          <nav>
+        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-6">
+          <nav className="space-y-1">
             <Link
               href="/console"
               className={`flex items-center gap-3 px-4 py-2.5 rounded-md transition-colors ${pathname === '/console' ? 'bg-[#1a3752] text-[#4fc3f7] font-medium' : 'hover:bg-[#1a3449] hover:text-white'}`}
@@ -111,6 +111,31 @@ const Sidebar = () => {
               All Projects
             </Link>
           </nav>
+
+          {isAdmin && (
+            <>
+              {/* Global Monitoring Section */}
+              <div>
+                <div className="px-4 text-[11px] font-bold uppercase tracking-wider mb-2 text-[#68859e]">
+                  Monitoring
+                </div>
+                <nav className="space-y-0.5">
+                  <NavItem href="/admin/health" icon={Activity} label="System Status" pathname={pathname} />
+                  <NavItem href="/admin/logs" icon={FileText} label="Cluster Logs" pathname={pathname} />
+                </nav>
+              </div>
+
+              {/* Web Administration Section */}
+              <div>
+                <div className="px-4 text-[11px] font-bold uppercase tracking-wider mb-2 text-[#68859e]">
+                  Administration
+                </div>
+                <nav className="space-y-0.5">
+                  <NavItem href="/admin/users" icon={Users} label="User Management" pathname={pathname} />
+                </nav>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="p-4 border-t border-[#1d3348] bg-[#041626]">
