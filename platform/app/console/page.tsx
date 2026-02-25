@@ -33,22 +33,32 @@ export default function Dashboard() {
 
     useEffect(() => {
         setIsMounted(true);
-        const userData = JSON.parse(localStorage.getItem('user') || '{}');
+        let userData = {};
+        try {
+            userData = JSON.parse(localStorage.getItem('user') || '{}');
+        } catch (e) {
+            console.error("Local storage parse error", e);
+        }
+
         const token = localStorage.getItem('token');
 
-        if (!token || !userData.id) {
+        if (!token || !userData || !(userData as any).id) {
             router.push('/login');
             return;
         }
 
         setUser(userData);
-        setIsAdmin(userData.role === 'admin');
+        setIsAdmin((userData as any).role === 'admin');
     }, [router]);
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const userData = JSON.parse(localStorage.getItem('user') || '{}');
+            let userData: any = {};
+            try {
+                userData = JSON.parse(localStorage.getItem('user') || '{}');
+            } catch (e) { }
+
             if (userData.role === 'admin') {
                 const devs = await api.get('/admin/users');
                 setDevelopers(devs);
@@ -106,8 +116,8 @@ export default function Dashboard() {
     // --- ADMIN VIEW ---
     if (isAdmin) {
         const filteredDevs = developers.filter(d =>
-            d.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            d.name.toLowerCase().includes(searchTerm.toLowerCase())
+            (d.email?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+            (d.name?.toLowerCase() || "").includes(searchTerm.toLowerCase())
         );
 
         return (
@@ -231,11 +241,15 @@ export default function Dashboard() {
                                     <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest px-2">Managed Projects</h4>
                                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                                         {devProjects.length > 0 ? devProjects.map(p => (
-                                            <div key={p.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl group hover:bg-white border border-transparent hover:border-gray-100 transition-all">
+                                            <div
+                                                key={p.id}
+                                                className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl group hover:bg-white border border-transparent hover:border-gray-100 transition-all cursor-pointer"
+                                                onClick={() => router.push(`/project/${p.id}`)}
+                                            >
                                                 <div className="flex items-center gap-3">
                                                     <Box className="h-4 w-4 text-orange-600" />
                                                     <div>
-                                                        <p className="text-sm font-bold text-gray-800">{p.name}</p>
+                                                        <p className="text-sm font-bold text-gray-800">{p.name || 'Untitled'}</p>
                                                         <p className="text-[10px] text-gray-400 font-medium">{p.platform}</p>
                                                     </div>
                                                 </div>

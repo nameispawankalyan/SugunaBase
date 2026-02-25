@@ -44,7 +44,10 @@ const Sidebar = () => {
         setIsAdmin(data.role === 'admin');
       } catch (e) {
         // Fallback to localStorage if /me fails
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        let user = { role: 'developer' };
+        try {
+          user = JSON.parse(localStorage.getItem('user') || '{}');
+        } catch (err) { }
         setFullUser(user);
         setIsAdmin(user.role === 'admin');
       }
@@ -123,7 +126,7 @@ const Sidebar = () => {
       <div className="h-[75px] flex items-center px-4 border-b border-[#1d3348] text-white hover:bg-[#1a3449] cursor-pointer transition">
         <div className="flex items-center gap-3 w-full">
           <div className="h-8 w-8 rounded-lg bg-blue-500 flex items-center justify-center text-[12px] font-bold text-white shadow-lg shadow-blue-500/20">
-            {projectName[0]}
+            {projectName?.[0] || 'P'}
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold truncate leading-tight text-[15px]">{projectName}</p>

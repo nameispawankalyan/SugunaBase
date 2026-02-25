@@ -65,21 +65,20 @@ const authenticateToken = (req, res, next) => {
 
     if (!token) return res.status(401).json({ error: "Access Denied" });
 
-    jwt.verify(token, JWT_SECRET, async (err, user) => {
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
         if (err) return res.status(403).json({ error: "Invalid Token" });
 
-        // Check if user is still active in DB
+        // Check if user is still active in DB and get role
         try {
-            const check = await pool.query('SELECT is_active FROM users WHERE id = $1', [user.id]);
+            const check = await pool.query('SELECT role, is_active FROM users WHERE id = $1', [decoded.id]);
             if (check.rows.length === 0 || !check.rows[0].is_active) {
                 return res.status(403).json({ error: "Account Deactivated", code: 'ACCOUNT_DISABLED' });
             }
+            req.user = { ...decoded, role: check.rows[0].role };
+            next();
         } catch (e) {
             return res.status(500).json({ error: "Internal Auth Error" });
         }
-
-        req.user = user;
-        next();
     });
 };
 
@@ -782,8 +781,8 @@ app.post('/v1/projects', authenticateToken, async (req, res) => {
 app.get('/v1/projects/:id', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
-            'SELECT * FROM projects WHERE id = $1 AND user_id = $2',
-            [req.params.id, req.user.id]
+            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
+            [req.params.id, req.user.id, req.user.role]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
         res.json(result.rows[0]);
@@ -793,10 +792,10 @@ app.get('/v1/projects/:id', authenticateToken, async (req, res) => {
 // GET USERS FOR A PROJECT (Console View)
 app.get('/v1/projects/:id/users', authenticateToken, async (req, res) => {
     try {
-        // 1. Verify Project Ownership
+        // 1. Verify Project Ownership/Admin
         const projectCheck = await pool.query(
-            'SELECT * FROM projects WHERE id = $1 AND user_id = $2',
-            [req.params.id, req.user.id]
+            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
+            [req.params.id, req.user.id, req.user.role]
         );
         if (projectCheck.rows.length === 0) return res.status(403).json({ error: "Unauthorized Access to Project" });
 
@@ -815,8 +814,8 @@ app.post('/v1/projects/:id/apps', authenticateToken, async (req, res) => {
     const { package_name } = req.body;
     try {
         const result = await pool.query(
-            'UPDATE projects SET package_name = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-            [package_name, req.params.id, req.user.id]
+            'UPDATE projects SET package_name = $1 WHERE id = $2 AND (user_id = $3 OR $4 = \'admin\') RETURNING *',
+            [package_name, req.params.id, req.user.id, req.user.role]
         );
         if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         io.to(req.user.id.toString()).emit("project_updated", result.rows[0]);
@@ -829,8 +828,8 @@ app.put('/v1/projects/:id/sha', authenticateToken, async (req, res) => {
     const { sha1, sha256 } = req.body;
     try {
         const result = await pool.query(
-            'UPDATE projects SET sha1_fingerprint = $1, sha256_fingerprint = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
-            [sha1, sha256, req.params.id, req.user.id]
+            'UPDATE projects SET sha1_fingerprint = $1, sha256_fingerprint = $2 WHERE id = $3 AND (user_id = $4 OR $5 = \'admin\') RETURNING *',
+            [sha1, sha256, req.params.id, req.user.id, req.user.role]
         );
         if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         res.json(result.rows[0]);
@@ -842,8 +841,8 @@ app.put('/v1/projects/:id', authenticateToken, async (req, res) => {
     const { name, google_client_id } = req.body;
     try {
         const result = await pool.query(
-            'UPDATE projects SET name = $1, google_client_id = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
-            [name, google_client_id, req.params.id, req.user.id]
+            'UPDATE projects SET name = $1, google_client_id = $2 WHERE id = $3 AND (user_id = $4 OR $5 = \'admin\') RETURNING *',
+            [name, google_client_id, req.params.id, req.user.id, req.user.role]
         );
         if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         res.json(result.rows[0]);
@@ -854,8 +853,8 @@ app.put('/v1/projects/:id', authenticateToken, async (req, res) => {
 app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
-            'DELETE FROM projects WHERE id = $1 AND user_id = $2 RETURNING *',
-            [req.params.id, req.user.id]
+            'DELETE FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *',
+            [req.params.id, req.user.id, req.user.role]
         );
         if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         res.json({ success: true, message: "Project deleted successfully" });
@@ -866,8 +865,8 @@ app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
 app.get('/v1/projects/:id/config', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
-            'SELECT * FROM projects WHERE id = $1 AND user_id = $2',
-            [req.params.id, req.user.id] // user.id from Token
+            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
+            [req.params.id, req.user.id, req.user.role]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
