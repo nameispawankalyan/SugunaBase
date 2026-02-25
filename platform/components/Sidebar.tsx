@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useParams } from 'next/navigation';
+import { usePathname, useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { api } from '@/utils/api';
 import {
@@ -35,8 +35,20 @@ const Sidebar = () => {
   const [projectName, setProjectName] = useState('Loading...');
   const [isAdmin, setIsAdmin] = useState(false);
 
+  const router = useRouter(); // Import useRouter from navigation
+
   // Check role and fetch profile on mount
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const token = localStorage.getItem('token');
+
+    // Auth Guard: If no token and not on public pages, redirect to login
+    if (!token && !['/', '/login', '/signup'].includes(pathname)) {
+      window.location.replace('/login');
+      return;
+    }
+
     const fetchProfile = async () => {
       try {
         const data = await api.get('/me');
@@ -50,10 +62,17 @@ const Sidebar = () => {
         } catch (err) { }
         setFullUser(user);
         setIsAdmin(user.role === 'admin');
+
+        // If even local storage fails or is empty, and we're not on public pages
+        if (!user || !(user as any).id) {
+          if (!['/', '/login', '/signup'].includes(pathname)) {
+            window.location.replace('/login');
+          }
+        }
       }
     };
-    fetchProfile();
-  }, []);
+    if (token) fetchProfile();
+  }, [pathname]);
 
   // HIDE SIDEBAR ON PUBLIC PAGES
   if (pathname === '/' || pathname === '/login' || pathname === '/signup') {
@@ -130,7 +149,9 @@ const Sidebar = () => {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold truncate leading-tight text-[15px]">{projectName}</p>
-            <p className="text-[10px] text-[#4fc3f7] font-black uppercase tracking-widest mt-0.5 truncate">{projectIdHuman}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 truncate mt-0.5 opacity-80">
+              {projectIdHuman || projectId}
+            </p>
           </div>
           <ChevronDown className="h-4 w-4 text-gray-400" />
         </div>

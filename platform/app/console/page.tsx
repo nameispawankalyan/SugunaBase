@@ -126,7 +126,7 @@ export default function Dashboard() {
                 <div className="flex justify-between items-end">
                     <div>
                         <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">System Administration</h1>
-                        <p className="text-gray-500 mt-2 font-medium">Monitoring {developers.length} Developers across the platform</p>
+                        <p className="text-gray-500 mt-2 font-medium">Monitoring {developers?.length || 0} Developers across the platform</p>
                     </div>
                     <button onClick={logout} className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-bold shadow-sm transition-all flex items-center gap-2">
                         Admin Logout <ChevronRight className="h-4 w-4" />
@@ -150,7 +150,7 @@ export default function Dashboard() {
                             <div className="p-3 bg-orange-50 rounded-xl"><Users className="h-6 w-6 text-orange-600" /></div>
                             <div>
                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Developers</p>
-                                <p className="text-2xl font-black text-gray-900">{developers.length}</p>
+                                <p className="text-2xl font-black text-gray-900">{developers?.length || 0}</p>
                             </div>
                         </div>
                     </div>
@@ -244,7 +244,7 @@ export default function Dashboard() {
                                             <div
                                                 key={p.id}
                                                 className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl group hover:bg-white border border-transparent hover:border-gray-100 transition-all cursor-pointer"
-                                                onClick={() => router.push(`/project/${p.id}`)}
+                                                onClick={() => router.push(`/project/${p.project_id || p.id}`)}
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <Box className="h-4 w-4 text-orange-600" />
@@ -337,7 +337,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            <Link href={`/project/${project.id}`} className={`absolute inset-0 z-10 ${!project.is_active ? 'pointer-events-none' : ''}`} />
+                            <Link href={`/project/${project.project_id || project.id}`} className={`absolute inset-0 z-10 ${!project.is_active ? 'pointer-events-none' : ''}`} />
                         </div>
                     ))}
 

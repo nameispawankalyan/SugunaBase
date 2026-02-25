@@ -97,11 +97,17 @@ const authenticateAppToken = (req, res, next) => {
 
 // Middleware to check if a project is active
 const verifyProjectActive = async (req, res, next) => {
-    const projectId = req.params.projectId || req.params.id || req.headers['x-project-id'];
+    let projectId = req.params.projectId || req.params.id || req.headers['x-project-id'];
     if (!projectId) return next();
 
+    // Check if it's a numeric ID or a string slug
+    const isNumeric = /^\d+$/.test(projectId);
+    const query = isNumeric
+        ? 'SELECT is_active FROM projects WHERE id = $1'
+        : 'SELECT is_active FROM projects WHERE project_id = $1';
+
     try {
-        const result = await pool.query('SELECT is_active FROM projects WHERE id = $1', [projectId]);
+        const result = await pool.query(query, [projectId]);
         if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
         if (!result.rows[0].is_active) {
             return res.status(403).json({ error: "This project has been deactivated by the administrator." });
@@ -779,11 +785,14 @@ app.post('/v1/projects', authenticateToken, async (req, res) => {
 });
 
 app.get('/v1/projects/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const isNumeric = /^\d+$/.test(id);
+    const query = isNumeric
+        ? 'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')'
+        : 'SELECT * FROM projects WHERE project_id = $1 AND (user_id = $2 OR $3 = \'admin\')';
+
     try {
-        const result = await pool.query(
-            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
-            [req.params.id, req.user.id, req.user.role]
-        );
+        const result = await pool.query(query, [id, req.user.id, req.user.role]);
         if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -791,18 +800,24 @@ app.get('/v1/projects/:id', authenticateToken, async (req, res) => {
 
 // GET USERS FOR A PROJECT (Console View)
 app.get('/v1/projects/:id/users', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const isNumeric = /^\d+$/.test(id);
     try {
         // 1. Verify Project Ownership/Admin
         const projectCheck = await pool.query(
-            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
-            [req.params.id, req.user.id, req.user.role]
+            isNumeric
+                ? 'SELECT id FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')'
+                : 'SELECT id FROM projects WHERE project_id = $1 AND (user_id = $2 OR $3 = \'admin\')',
+            [id, req.user.id, req.user.role]
         );
         if (projectCheck.rows.length === 0) return res.status(403).json({ error: "Unauthorized Access to Project" });
+
+        const actualId = projectCheck.rows[0].id;
 
         // 2. Fetch Users
         const users = await pool.query(
             'SELECT * FROM app_users WHERE project_id = $1 ORDER BY created_at DESC',
-            [req.params.id]
+            [actualId]
         );
         res.json({ users: users.rows });
 
@@ -851,11 +866,13 @@ app.put('/v1/projects/:id', authenticateToken, async (req, res) => {
 
 // Delete Project
 app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const isNumeric = /^\d+$/.test(id);
+    const query = isNumeric
+        ? 'DELETE FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *'
+        : 'DELETE FROM projects WHERE project_id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *';
     try {
-        const result = await pool.query(
-            'DELETE FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *',
-            [req.params.id, req.user.id, req.user.role]
-        );
+        const result = await pool.query(query, [id, req.user.id, req.user.role]);
         if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         res.json({ success: true, message: "Project deleted successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
