@@ -1162,7 +1162,7 @@ app.post('/v1/internal/functions/logs', async (req, res) => {
 // ====================================================
 // CLOUD MESSAGING PROXY (Standalone Microservice)
 // ====================================================
-app.use('/v1/messaging/register', authenticateAppToken, verifyProjectActive, (req, res) => {
+app.use('/v1/messaging/register', authenticateAppToken, resolveProject, (req, res) => {
     const { fcm_token, device_id, platform } = req.body;
     const { app_user_id, project_id } = req.app_user;
 
