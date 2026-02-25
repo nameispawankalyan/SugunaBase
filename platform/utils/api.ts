@@ -76,7 +76,7 @@ export const api = {
     }
 };
 
-export const SugunaCastAPI = {
+export const castApi = {
     // Standard Cast API remains the same as it uses a different base URL usually
     getToken: async (data: any) => {
         const res = await fetch(`${API_BASE_URL}/cast/get-token`, {
@@ -84,6 +84,11 @@ export const SugunaCastAPI = {
             headers: api.getHeaders(),
             body: JSON.stringify(data)
         });
+        return await api.handleResponse(res);
+    },
+    // Adding get method for general use in cast dashboard
+    get: async (endpoint: string) => {
+        const res = await fetch(`${API_BASE_URL}/cast${endpoint}`, { headers: api.getHeaders() });
         return await api.handleResponse(res);
     }
 };
