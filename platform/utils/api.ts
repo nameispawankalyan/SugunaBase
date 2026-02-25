@@ -10,18 +10,18 @@ export const api = {
     },
 
     handleResponse: async (res: Response) => {
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
             // If account is deactivated, force logout
-            if (errorData.code === 'ACCOUNT_DISABLED') {
+            if (data.code === 'ACCOUNT_DISABLED') {
                 if (typeof window !== 'undefined') {
                     localStorage.clear();
                     window.location.href = '/login?error=deactivated';
                 }
             }
-            throw new Error(errorData.error || `API Error: ${res.statusText}`);
+            throw new Error(data.error || `API Error: ${res.statusText}`);
         }
-        return await res.json();
+        return data;
     },
 
     get: async (endpoint: string) => {
