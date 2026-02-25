@@ -122,6 +122,16 @@ export default function ProjectDetails() {
         document.body.removeChild(a);
     };
 
+    const handleDeleteProject = async () => {
+        if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) return;
+        try {
+            await api.delete(`/projects/${projectId}`);
+            router.push('/console');
+        } catch (error: any) {
+            alert('Failed to delete project: ' + error.message);
+        }
+    };
+
     if (loading) {
         return <div className="p-8 text-center flex items-center justify-center h-screen">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
@@ -140,16 +150,22 @@ export default function ProjectDetails() {
                 <div className="flex-1">
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">{project.name}</h1>
                     <div className="flex items-center text-sm text-gray-500 mt-1">
-                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium mr-2">{project.platform}</span>
-                        <span>ID: {projectId}</span>
+                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium mr-3">{project.platform}</span>
+                        <span className="font-mono text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 uppercase tracking-tight">ID: {project.project_id || projectId}</span>
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 shadow-sm transition-all">
+                    <button
+                        onClick={() => router.push(`/project/${projectId}/settings`)}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 shadow-sm transition-all"
+                    >
                         <Settings className="h-4 w-4" />
                         Settings
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium shadow-sm transition-all">
+                    <button
+                        onClick={handleDeleteProject}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium shadow-sm transition-all"
+                    >
                         <Trash2 className="h-4 w-4" />
                         Delete
                     </button>

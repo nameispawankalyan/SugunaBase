@@ -30,14 +30,26 @@ const Sidebar = () => {
   const params = useParams();
   const projectId = params?.id as string; // Get Project ID from URL
 
+  const [fullUser, setFullUser] = useState<any>(null);
   const [projectIdHuman, setProjectIdHuman] = useState('');
   const [projectName, setProjectName] = useState('Loading...');
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Check role on mount
+  // Check role and fetch profile on mount
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    setIsAdmin(user.role === 'admin');
+    const fetchProfile = async () => {
+      try {
+        const data = await api.get('/me');
+        setFullUser(data);
+        setIsAdmin(data.role === 'admin');
+      } catch (e) {
+        // Fallback to localStorage if /me fails
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        setFullUser(user);
+        setIsAdmin(user.role === 'admin');
+      }
+    };
+    fetchProfile();
   }, []);
 
   // HIDE SIDEBAR ON PUBLIC PAGES
@@ -69,10 +81,10 @@ const Sidebar = () => {
         {/* Main Header */}
         <div className="h-[60px] flex items-center px-4 border-b border-[#1d3348] text-white">
           <div className="flex items-center gap-3 w-full">
-            <div className="h-6 w-6 rounded bg-orange-600 flex items-center justify-center text-[10px] font-bold text-white">
+            <div className="h-6 w-6 rounded bg-orange-600 flex items-center justify-center text-[10px] font-bold text-white shadow-lg shadow-orange-600/20">
               S
             </div>
-            <span className="font-medium truncate flex-1">Suguna Console</span>
+            <span className="font-bold truncate flex-1 tracking-tight">Suguna Console</span>
           </div>
         </div>
 
@@ -88,9 +100,17 @@ const Sidebar = () => {
           </nav>
         </div>
 
-        <div className="p-4 border-t border-[#1d3348]">
-          <p className="text-xs text-[#526f8b] uppercase font-bold tracking-wider mb-2">Workspace</p>
-          <div className="text-sm text-gray-400">Ram Charan</div>
+        <div className="p-4 border-t border-[#1d3348] bg-[#041626]">
+          <p className="text-[10px] text-[#526f8b] uppercase font-black tracking-widest mb-3">My Identity</p>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-xs uppercase">
+              {fullUser?.name?.[0] || 'U'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold truncate text-xs">{fullUser?.name || 'User'}</p>
+              <p className="text-[9px] text-[#4fc3f7] font-black uppercase tracking-tighter truncate">{fullUser?.developer_id || 'ID Pending'}</p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -176,15 +196,20 @@ const Sidebar = () => {
 
       </div>
 
-      {/* Footer / Settings */}
-      <div className="p-2 border-t border-[#1d3348]">
-        <Link
-          href={`/project/${projectId}/settings`}
-          className="flex items-center gap-3 px-4 py-2 hover:bg-[#1a3449] hover:text-white rounded-md transition-colors"
-        >
-          <Settings className="h-5 w-5" />
-          Project Settings
-        </Link>
+      {/* Footer / User Identity */}
+      <div className="p-4 border-t border-[#1d3348] bg-[#041626]">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-xs uppercase shadow-lg shadow-blue-500/20">
+            {fullUser?.name?.[0] || 'U'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold truncate text-xs">{fullUser?.name || 'User'}</p>
+            <p className="text-[9px] text-[#4fc3f7] font-black uppercase tracking-tighter truncate">{fullUser?.developer_id || 'ID Pending'}</p>
+          </div>
+          <Link href={`/project/${projectId}/settings`} title="Project Settings">
+            <Settings className="h-4 w-4 text-gray-500 hover:text-white transition-colors" />
+          </Link>
+        </div>
       </div>
     </div>
   );

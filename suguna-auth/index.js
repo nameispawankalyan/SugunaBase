@@ -30,9 +30,15 @@ app.post('/signup', async (req, res) => {
     const { email, password, name } = req.body;
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Generate Developer ID
+        const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const randomStr = Math.random().toString(36).substring(2, 6);
+        const devId = `dev-${slug}-${randomStr}`;
+
         const result = await pool.query(
-            'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, role, is_active',
-            [email, hashedPassword, name]
+            'INSERT INTO users (email, password_hash, name, developer_id) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role, is_active, developer_id',
+            [email, hashedPassword, name, devId]
         );
         const token = jwt.sign({ id: result.rows[0].id }, JWT_SECRET, { expiresIn: '1d' });
         res.status(201).json({ user: result.rows[0], token });
@@ -63,7 +69,7 @@ app.post('/login', async (req, res) => {
 
         console.log(`[AUTH] Login Success: ${email}`);
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
-        res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role }, token });
+        res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, developer_id: user.developer_id }, token });
     } catch (e) {
         console.error(`[AUTH] Login Crash: ${e.message}`);
         res.status(500).json({ error: 'Internal Auth Error: ' + e.message });

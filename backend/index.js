@@ -130,6 +130,10 @@ const initDB = async () => {
         try {
             await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT \'developer\';');
             await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;');
+            await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS developer_id VARCHAR(100) UNIQUE;');
+
+            // Backfill developer_id for existing users
+            await pool.query(`UPDATE users SET developer_id = 'dev-' || LOWER(REPLACE(name, ' ', '-')) || '-' || id WHERE developer_id IS NULL;`);
         } catch (e) { }
 
         await pool.query(`
@@ -726,6 +730,18 @@ app.delete('/v1/console/projects/:projectId/hosting/sites/:siteId', authenticate
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
+// --- USER PROFILE ENDPOINT ---
+app.get('/v1/me', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, name, email, role, is_active, developer_id, created_at FROM users WHERE id = $1',
+            [req.user.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Get User's Projects
 app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
     try {
@@ -816,6 +832,31 @@ app.put('/v1/projects/:id/sha', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Update Project Name and Google Client ID
+app.put('/v1/projects/:id', authenticateToken, async (req, res) => {
+    const { name, google_client_id } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE projects SET name = $1, google_client_id = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
+            [name, google_client_id, req.params.id, req.user.id]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Delete Project
+app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'DELETE FROM projects WHERE id = $1 AND user_id = $2 RETURNING *',
+            [req.params.id, req.user.id]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
+        res.json({ success: true, message: "Project deleted successfully" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Download Config JSON (Suguna Services) - Endpoint to generate the file
 app.get('/v1/projects/:id/config', authenticateToken, async (req, res) => {
     try {
@@ -831,7 +872,7 @@ app.get('/v1/projects/:id/config', authenticateToken, async (req, res) => {
         // Construct the JSON structure similar to google-services.json but for SugunaBase
         const config = {
             "project_info": {
-                "project_id": project.id,
+                "project_id": project.project_id || project.id,
                 "project_name": project.name,
                 "package_name": project.package_name
             },
