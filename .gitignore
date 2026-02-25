@@ -8,6 +8,5 @@ build/
 package-lock.json
 key.pem
 cert.pem
-logs/
 out/
 Release/

@@ -1,0 +1,10 @@
+{
+  "roomId": "demo-room",
+  "appId": "suguna-project-1",
+  "type": "video_call",
+  "status": "ENDED",
+  "startTime": 1771847781999,
+  "participants": [],
+  "endTime": 1771847819645,
+  "durationSeconds": 37.646
+}

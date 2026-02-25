@@ -1,0 +1,19 @@
+{
+  "roomId": "demo-room",
+  "appId": "suguna-project-1",
+  "type": "video_call",
+  "status": "ENDED",
+  "startTime": 1771848162876,
+  "endTime": 1771848189989,
+  "durationSeconds": 27.113,
+  "participants": [
+    {
+      "uid": "user-raj3d",
+      "network": "4g",
+      "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      "location": "Hyderabad, TS",
+      "timestamp": 1771848173599,
+      "name": "Guest User"
+    }
+  ]
+}
