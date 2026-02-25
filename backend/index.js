@@ -96,25 +96,41 @@ const authenticateAppToken = (req, res, next) => {
 };
 
 // Middleware to check if a project is active
-const verifyProjectActive = async (req, res, next) => {
-    let projectId = req.params.projectId || req.params.id || req.headers['x-project-id'];
-    if (!projectId) return next();
-
-    // Check if it's a numeric ID or a string slug
-    const isNumeric = /^\d+$/.test(projectId);
-    const query = isNumeric
-        ? 'SELECT is_active FROM projects WHERE id = $1'
-        : 'SELECT is_active FROM projects WHERE project_id = $1';
+// Middleware to resolve Project ID (Slug -> Numeric) and check if active
+const resolveProject = async (req, res, next) => {
+    let projectIdRaw = req.params.projectId || req.params.id || req.headers['x-project-id'];
+    if (!projectIdRaw) return next();
 
     try {
-        const result = await pool.query(query, [projectId]);
-        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+        const isNumeric = /^\d+$/.test(projectIdRaw);
+        const query = isNumeric
+            ? 'SELECT id, is_active FROM projects WHERE id = $1'
+            : 'SELECT id, is_active FROM projects WHERE project_id = $1';
+
+        const result = await pool.query(query, [projectIdRaw]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Project not found" });
+        }
+
         if (!result.rows[0].is_active) {
             return res.status(403).json({ error: "This project has been deactivated by the administrator." });
         }
+
+        const actualId = result.rows[0].id.toString();
+
+        // Inject resolved numeric ID back into params/headers
+        if (req.params.projectId) req.params.projectId = actualId;
+        if (req.params.id) req.params.id = actualId;
+        if (req.headers['x-project-id']) req.headers['x-project-id'] = actualId;
+
+        // Attach project data to request object for convenience
+        req.project = result.rows[0];
+
         next();
     } catch (e) {
-        next();
+        console.error("Project Resolution Error:", e.message);
+        res.status(500).json({ error: "Internal Project Resolution Error" });
     }
 };
 
@@ -488,7 +504,7 @@ app.post('/v1/cast/get-token', async (req, res) => {
 // ====================================================
 // FIRESTORE PROXY (suguna-firestore: 3400)
 // ====================================================
-app.all('/v1/firestore/*', authenticateAppToken, verifyProjectActive, (req, res) => {
+app.all('/v1/firestore/*', authenticateAppToken, resolveProject, (req, res) => {
     const { project_id } = req.app_user;
     const fullPath = req.params[0];
 
@@ -515,7 +531,7 @@ app.use('/storage', createProxyMiddleware({
 }));
 
 // Handle App Uploads
-app.post('/v1/storage/upload', authenticateAppToken, verifyProjectActive, (req, res, next) => {
+app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, next) => {
     // Inject headers for the storage service to consume
     req.headers['x-project-id'] = req.app_user.project_id;
     req.headers['x-folder-path'] = req.body.folder_path || '';
@@ -528,7 +544,7 @@ app.post('/v1/storage/upload', authenticateAppToken, verifyProjectActive, (req, 
 }));
 
 // Handle Console Uploads
-app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, (req, res, next) => {
+app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, resolveProject, (req, res, next) => {
     req.headers['x-project-id'] = req.params.projectId;
     req.headers['x-folder-path'] = req.body.folder_path || '';
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
@@ -540,19 +556,19 @@ app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, (r
 }));
 
 // Console Storage Management
-app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, (req, res) => {
+app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, resolveProject, (req, res) => {
     axios.post('http://localhost:3500/folder', { projectId: req.params.projectId, ...req.body })
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.delete('/v1/console/projects/:projectId/storage', authenticateToken, (req, res) => {
+app.delete('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
     axios.delete(`http://localhost:3500/delete/${req.params.projectId}`, { data: req.body })
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.get('/v1/console/projects/:projectId/storage', authenticateToken, (req, res) => {
+app.get('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
     axios.get(`http://localhost:3500/list/${req.params.projectId}`)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
@@ -561,7 +577,7 @@ app.get('/v1/console/projects/:projectId/storage', authenticateToken, (req, res)
 
 // --- CONSOLE FIRESTORE MANAGEMENT ---
 
-app.get('/v1/console/projects/:projectId/firestore/collections', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/firestore/collections', authenticateToken, resolveProject, async (req, res) => {
     const { projectId } = req.params;
     try {
         const result = await pool.query(
@@ -573,7 +589,7 @@ app.get('/v1/console/projects/:projectId/firestore/collections', authenticateTok
 });
 
 // Unified Console Firestore Handler (Supports Deeply Nested Paths)
-app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, resolveProject, async (req, res) => {
     const { projectId } = req.params;
     const fullPath = req.params[0];
     const segments = fullPath.split('/').filter(s => s.length > 0);
@@ -686,7 +702,7 @@ app.get('/v1/cluster-health', async (req, res) => {
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
 
 // Check Project Status for App (Public Route)
-app.get('/v1/app/check-project/:id', async (req, res) => {
+app.get('/v1/app/check-project/:id', resolveProject, async (req, res) => {
     const projectId = req.params.id;
     console.log(`🔍[App] Checking status for Project ID: ${projectId} `);
     try {
@@ -696,7 +712,7 @@ app.get('/v1/app/check-project/:id', async (req, res) => {
             return res.json({ exists: false, active: false });
         }
         const active = result.rows[0].google_sign_in_enabled;
-        console.log(`✅ Project ${projectId} found.Active: ${active} `);
+        console.log(`✅ Project ${projectId} found. Active: ${active} `);
         res.json({ exists: true, active: active });
     } catch (e) {
         console.error(`🔥 Error checking project ${projectId}: `, e.message);
@@ -705,7 +721,7 @@ app.get('/v1/app/check-project/:id', async (req, res) => {
 });
 
 // Internal Route to get Project Activity Status for Cloud Functions Hub
-app.get('/v1/internal/projects/:projectId/status', async (req, res) => {
+app.get('/v1/internal/projects/:projectId/status', resolveProject, async (req, res) => {
     try {
         const result = await pool.query('SELECT is_active FROM projects WHERE id = $1', [req.params.projectId]);
         if (result.rows.length === 0) {
@@ -720,21 +736,21 @@ app.get('/v1/internal/projects/:projectId/status', async (req, res) => {
 // --- PROTECTED ROUTES (Require Login) ---
 
 // Get Hosting Sites for a Project
-app.get('/v1/console/projects/:projectId/hosting/sites', authenticateToken, (req, res) => {
+app.get('/v1/console/projects/:projectId/hosting/sites', authenticateToken, resolveProject, (req, res) => {
     axios.get(`http://localhost:3600/sites/${req.params.projectId}`)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 // Toggle Hosting Site Status (Active/Inactive)
-app.post('/v1/console/projects/:projectId/hosting/sites/:siteId/toggle', authenticateToken, (req, res) => {
+app.post('/v1/console/projects/:projectId/hosting/sites/:siteId/toggle', authenticateToken, resolveProject, (req, res) => {
     axios.post(`http://localhost:3600/sites/${req.params.projectId}/${req.params.siteId}/toggle`, req.body)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 // Delete Hosting Site
-app.delete('/v1/console/projects/:projectId/hosting/sites/:siteId', authenticateToken, (req, res) => {
+app.delete('/v1/console/projects/:projectId/hosting/sites/:siteId', authenticateToken, resolveProject, (req, res) => {
     axios.delete(`http://localhost:3600/sites/${req.params.projectId}/${req.params.siteId}`)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
@@ -784,40 +800,25 @@ app.post('/v1/projects', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/v1/projects/:id', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const isNumeric = /^\d+$/.test(id);
-    const query = isNumeric
-        ? 'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')'
-        : 'SELECT * FROM projects WHERE project_id = $1 AND (user_id = $2 OR $3 = \'admin\')';
-
+app.get('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
     try {
-        const result = await pool.query(query, [id, req.user.id, req.user.role]);
+        const result = await pool.query(
+            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
+            [req.params.id, req.user.id, req.user.role]
+        );
         if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET USERS FOR A PROJECT (Console View)
-app.get('/v1/projects/:id/users', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const isNumeric = /^\d+$/.test(id);
+app.get('/v1/projects/:id/users', authenticateToken, resolveProject, async (req, res) => {
     try {
-        // 1. Verify Project Ownership/Admin
-        const projectCheck = await pool.query(
-            isNumeric
-                ? 'SELECT id FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')'
-                : 'SELECT id FROM projects WHERE project_id = $1 AND (user_id = $2 OR $3 = \'admin\')',
-            [id, req.user.id, req.user.role]
-        );
-        if (projectCheck.rows.length === 0) return res.status(403).json({ error: "Unauthorized Access to Project" });
-
-        const actualId = projectCheck.rows[0].id;
-
+        // 1. Verify Project Ownership/Admin (handled by resolveProject middleware)
         // 2. Fetch Users
         const users = await pool.query(
             'SELECT * FROM app_users WHERE project_id = $1 ORDER BY created_at DESC',
-            [actualId]
+            [req.project.id]
         );
         res.json({ users: users.rows });
 
@@ -865,21 +866,19 @@ app.put('/v1/projects/:id', authenticateToken, async (req, res) => {
 });
 
 // Delete Project
-app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const isNumeric = /^\d+$/.test(id);
-    const query = isNumeric
-        ? 'DELETE FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *'
-        : 'DELETE FROM projects WHERE project_id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *';
+app.delete('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
     try {
-        const result = await pool.query(query, [id, req.user.id, req.user.role]);
+        const result = await pool.query(
+            'DELETE FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *',
+            [req.params.id, req.user.id, req.user.role]
+        );
         if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         res.json({ success: true, message: "Project deleted successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Download Config JSON (Suguna Services) - Endpoint to generate the file
-app.get('/v1/projects/:id/config', authenticateToken, async (req, res) => {
+app.get('/v1/projects/:id/config', authenticateToken, resolveProject, async (req, res) => {
     try {
         const result = await pool.query(
             'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
@@ -940,7 +939,7 @@ app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
 });
 
 // --- ANALYTICS DASHBOARD API ---
-app.get('/v1/console/projects/:projectId/analytics', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/analytics', authenticateToken, resolveProject, async (req, res) => {
     const { projectId } = req.params;
     const { range, startDate, endDate } = req.query;
 
@@ -1089,7 +1088,7 @@ io.on('connection', (socket) => {
 // --- FUNCTIONS MANAGEMENT ROUTES ---
 
 // Fetch Functions (Firebase Style Table Data)
-app.get('/v1/console/projects/:projectId/functions', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/functions', authenticateToken, resolveProject, async (req, res) => {
     const projectId = req.params.projectId;
     try {
         const result = await pool.query(
@@ -1104,7 +1103,7 @@ app.get('/v1/console/projects/:projectId/functions', authenticateToken, async (r
 });
 
 // Fetch Logs for a specific function
-app.get('/v1/console/projects/:projectId/functions/:name/logs', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/functions/:name/logs', authenticateToken, resolveProject, async (req, res) => {
     const { projectId, name } = req.params;
     try {
         const result = await pool.query(
@@ -1115,7 +1114,7 @@ app.get('/v1/console/projects/:projectId/functions/:name/logs', authenticateToke
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/v1/console/projects/:projectId/functions/:name', authenticateToken, async (req, res) => {
+app.delete('/v1/console/projects/:projectId/functions/:name', authenticateToken, resolveProject, async (req, res) => {
     const { projectId, name } = req.params;
     try {
         await pool.query('DELETE FROM functions_deployments WHERE project_id = $1 AND name = $2', [projectId, name]);
@@ -1173,7 +1172,7 @@ app.use('/v1/messaging/register', authenticateAppToken, verifyProjectActive, (re
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.put('/v1/console/projects/:projectId/messaging/config', authenticateToken, async (req, res) => {
+app.put('/v1/console/projects/:projectId/messaging/config', authenticateToken, resolveProject, async (req, res) => {
     const { projectId } = req.params;
     const { serviceAccount } = req.body;
     try {
@@ -1183,14 +1182,14 @@ app.put('/v1/console/projects/:projectId/messaging/config', authenticateToken, a
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/v1/console/projects/:projectId/messaging/send', authenticateToken, (req, res) => {
+app.post('/v1/console/projects/:projectId/messaging/send', authenticateToken, resolveProject, (req, res) => {
     const { projectId } = req.params;
     axios.post(`http://localhost:3200/send/${projectId}`, req.body)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.get('/v1/console/projects/:projectId/messaging/history', authenticateToken, async (req, res) => {
+app.get('/v1/console/projects/:projectId/messaging/history', authenticateToken, resolveProject, async (req, res) => {
     const { projectId } = req.params;
     try {
         const history = await pool.query('SELECT * FROM notifications_history WHERE project_id = $1 ORDER BY created_at DESC LIMIT 50', [projectId]);
@@ -1200,7 +1199,7 @@ app.get('/v1/console/projects/:projectId/messaging/history', authenticateToken, 
 });
 // ====================================================
 
-app.post('/v1/console/projects/:projectId/functions/:name/schedule', authenticateToken, async (req, res) => {
+app.post('/v1/console/projects/:projectId/functions/:name/schedule', authenticateToken, resolveProject, async (req, res) => {
     const { projectId, name } = req.params;
     const { cronString } = req.body;
 
