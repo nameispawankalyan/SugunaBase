@@ -12,6 +12,7 @@ export const api = {
     handleResponse: async (res: Response) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
+            console.error(`[API Error] ${res.status} ${res.statusText}`, data);
             // If account is deactivated or unauthorized, force logout
             if (data.code === 'ACCOUNT_DISABLED' || res.status === 401) {
                 if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
@@ -19,7 +20,7 @@ export const api = {
                     window.location.href = '/login?error=' + (data.code || 'unauthorized');
                 }
             }
-            throw new Error(data.error || `API Error: ${res.statusText}`);
+            throw new Error(data.error || `Server Error: ${res.status}`);
         }
         return data;
     },
@@ -28,8 +29,10 @@ export const api = {
         try {
             const res = await fetch(`${API_BASE_URL}${endpoint}`, { headers: api.getHeaders() });
             return await api.handleResponse(res);
-        } catch (error) {
-            console.error("API GET Error:", error);
+        } catch (error: any) {
+            if (error.name === 'TypeError' || error.message.includes('fetch')) {
+                throw new Error("Unable to connect to SugunaBase Server. Please check your network.");
+            }
             throw error;
         }
     },
@@ -42,8 +45,10 @@ export const api = {
                 body: JSON.stringify(data),
             });
             return await api.handleResponse(res);
-        } catch (error) {
-            console.error("API POST Error:", error);
+        } catch (error: any) {
+            if (error.name === 'TypeError' || error.message.includes('fetch')) {
+                throw new Error("Unable to connect to SugunaBase Server. Please check your network.");
+            }
             throw error;
         }
     },
@@ -56,8 +61,10 @@ export const api = {
                 body: JSON.stringify(data),
             });
             return await api.handleResponse(res);
-        } catch (error) {
-            console.error("API PUT Error:", error);
+        } catch (error: any) {
+            if (error.name === 'TypeError' || error.message.includes('fetch')) {
+                throw new Error("Unable to connect to SugunaBase Server. Please check your network.");
+            }
             throw error;
         }
     },
@@ -69,8 +76,10 @@ export const api = {
                 headers: api.getHeaders(),
             });
             return await api.handleResponse(res);
-        } catch (error) {
-            console.error("API DELETE Error:", error);
+        } catch (error: any) {
+            if (error.name === 'TypeError' || error.message.includes('fetch')) {
+                throw new Error("Unable to connect to SugunaBase Server. Please check your network.");
+            }
             throw error;
         }
     }
