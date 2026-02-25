@@ -332,6 +332,51 @@ const initDB = async () => {
             await pool.query('ALTER TABLE functions_deployments ADD COLUMN IF NOT EXISTS trigger_value TEXT;');
         } catch (e) { }
 
+        // Multi-App and Multi-Fingerprint Support
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS project_apps (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                app_name VARCHAR(100),
+                package_name VARCHAR(255) NOT NULL,
+                platform VARCHAR(50) DEFAULT 'android',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, package_name)
+            );
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS app_fingerprints (
+                id SERIAL PRIMARY KEY,
+                app_id INTEGER REFERENCES project_apps(id) ON DELETE CASCADE,
+                sha1 VARCHAR(255),
+                sha256 VARCHAR(255),
+                label VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Migration for existing project apps
+        try {
+            const existingAppsResult = await pool.query('SELECT id, package_name, sha1_fingerprint, sha256_fingerprint FROM projects WHERE package_name IS NOT NULL');
+            for (const row of existingAppsResult.rows) {
+                // 1. Create entry in project_apps
+                const appInsert = await pool.query(
+                    'INSERT INTO project_apps (project_id, app_name, package_name) VALUES ($1, $2, $3) ON CONFLICT (project_id, package_name) DO UPDATE SET package_name = $3 RETURNING id',
+                    [row.id, 'Main App', row.package_name]
+                );
+                const appId = appInsert.rows[0].id;
+
+                // 2. Create entry in app_fingerprints if SHA exists
+                if (row.sha1_fingerprint || row.sha256_fingerprint) {
+                    await pool.query(
+                        'INSERT INTO app_fingerprints (app_id, sha1, sha256, label) SELECT $1, $2, $3, $4 WHERE NOT EXISTS (SELECT 1 FROM app_fingerprints WHERE app_id = $1 AND (sha1 = $2 OR sha256 = $3))',
+                        [appId, row.sha1_fingerprint, row.sha256_fingerprint, 'Legacy Key']
+                    );
+                }
+            }
+        } catch (e) { console.error("App Migration Error:", e.message); }
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS cast_calls (
                 id SERIAL PRIMARY KEY,
@@ -875,6 +920,63 @@ app.put('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) 
             [name, google_client_id, req.project.id]
         );
         res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET APPS FOR A PROJECT
+app.get('/v1/projects/:id/apps', authenticateToken, resolveProject, async (req, res) => {
+    try {
+        const apps = await pool.query('SELECT * FROM project_apps WHERE project_id = $1 ORDER BY created_at ASC', [req.project.id]);
+
+        // Fetch fingerprints for each app
+        const appsWithKeys = await Promise.all(apps.rows.map(async (app) => {
+            const keys = await pool.query('SELECT * FROM app_fingerprints WHERE app_id = $1 ORDER BY created_at ASC', [app.id]);
+            return { ...app, fingerprints: keys.rows };
+        }));
+
+        res.json(appsWithKeys);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ADD NEW APP TO PROJECT
+app.post('/v1/projects/:id/apps', authenticateToken, resolveProject, async (req, res) => {
+    const { package_name, app_name, platform } = req.body;
+    if (!package_name) return res.status(400).json({ error: "Package name is required" });
+
+    try {
+        const result = await pool.query(
+            'INSERT INTO project_apps (project_id, package_name, app_name, platform) VALUES ($1, $2, $3, $4) RETURNING *',
+            [req.project.id, package_name, app_name || 'My App', platform || 'android']
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE APP
+app.delete('/v1/projects/:id/apps/:appId', authenticateToken, resolveProject, async (req, res) => {
+    try {
+        await pool.query('DELETE FROM project_apps WHERE id = $1 AND project_id = $2', [req.params.appId, req.project.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ADD FINGERPRINT TO APP
+app.post('/v1/projects/:id/apps/:appId/fingerprints', authenticateToken, resolveProject, async (req, res) => {
+    const { sha1, sha256, label } = req.body;
+    try {
+        const result = await pool.query(
+            'INSERT INTO app_fingerprints (app_id, sha1, sha256, label) VALUES ($1, $2, $3, $4) RETURNING *',
+            [req.params.appId, sha1, sha256, label || 'Development']
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE FINGERPRINT
+app.delete('/v1/projects/:id/apps/:appId/fingerprints/:fId', authenticateToken, resolveProject, async (req, res) => {
+    try {
+        await pool.query('DELETE FROM app_fingerprints WHERE id = $1 AND app_id = $2', [req.params.fId, req.params.appId]);
+        res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

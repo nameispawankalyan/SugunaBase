@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { api } from '@/utils/api';
-import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2, Key, Save, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 // Config Object Generator
@@ -13,7 +13,7 @@ const generateConfig = (projectId: string, packageName: string, googleClientId?:
             "project_name": "SugunaBase Project",
             "project_id": projectId,
             "project_number": "1",
-            "endpoint": "https://api.suguna.co/v1" // Secured Endpoint
+            "endpoint": "https://api.suguna.co/v1"
         },
         "client": [
             {
@@ -44,77 +44,97 @@ export default function ProjectDetails() {
     const projectId = params.id as string;
 
     const [project, setProject] = useState<any>(null);
+    const [apps, setApps] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [packageName, setPackageName] = useState('');
     const [isAddingApp, setIsAddingApp] = useState(false);
-    const [configJson, setConfigJson] = useState<string | null>(null);
+    const [newAppName, setNewAppName] = useState('');
+    const [newPackageName, setNewPackageName] = useState('');
     const [error, setError] = useState<string | null>(null);
 
-    // SHA Keys State
-    const [sha1, setSha1] = useState('');
-    const [sha256, setSha256] = useState('');
-    const [savingKeys, setSavingKeys] = useState(false);
+    // Fingerprint Modal/State
+    const [addingKeyTo, setAddingKeyTo] = useState<number | null>(null);
+    const [newKeyLabel, setNewKeyLabel] = useState('Debug');
+    const [newSha1, setNewSha1] = useState('');
+    const [newSha256, setNewSha256] = useState('');
+    const [savingKey, setSavingKey] = useState(false);
+
+    const fetchProjectAndApps = async () => {
+        try {
+            const [projData, appsData] = await Promise.all([
+                api.get(`/projects/${projectId}`),
+                api.get(`/projects/${projectId}/apps`)
+            ]);
+            setProject(projData);
+            setApps(appsData);
+        } catch (error: any) {
+            console.error("Failed to fetch project details", error);
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        if (!projectId) return;
-
-        const fetchProject = async () => {
-            try {
-                const doc = await api.get(`/projects/${projectId}`);
-                setProject(doc);
-                if (doc.package_name) {
-                    setPackageName(doc.package_name);
-                    setSha1(doc.sha1_fingerprint || '');
-                    setSha256(doc.sha256_fingerprint || '');
-                    setConfigJson(JSON.stringify(generateConfig(projectId, doc.package_name, doc.google_client_id), null, 2));
-                }
-            } catch (error: any) {
-                console.error("Failed to fetch project", error);
-                setError(error.message);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchProject();
+        if (projectId) fetchProjectAndApps();
     }, [projectId]);
 
     const handleAddApp = async () => {
-        if (!packageName) return;
+        if (!newPackageName) return;
         try {
             await api.post(`/projects/${projectId}/apps`, {
-                package_name: packageName
+                package_name: newPackageName,
+                app_name: newAppName || 'My App'
             });
-
-            // Update local state
-            const updatedProject = { ...project, package_name: packageName };
-            setProject(updatedProject);
-            setConfigJson(JSON.stringify(generateConfig(projectId, packageName, project.google_client_id), null, 2));
+            setNewAppName('');
+            setNewPackageName('');
             setIsAddingApp(false);
-            alert('App linked successfully!');
+            fetchProjectAndApps();
+            alert('App registered successfully!');
         } catch (error: any) {
             alert('Failed to add app: ' + error.message);
         }
     };
 
-    const handleSaveKeys = async () => {
-        setSavingKeys(true);
+    const handleDeleteApp = async (appId: number) => {
+        if (!confirm('Delete this app and all its fingerprints?')) return;
         try {
-            const updated = await api.put(`/projects/${projectId}/sha`, { sha1, sha256 });
-            setProject(updated);
-            setSha1(updated.sha1_fingerprint || '');
-            setSha256(updated.sha256_fingerprint || '');
-            alert('Signing keys saved successfully!');
+            await api.delete(`/projects/${projectId}/apps/${appId}`);
+            fetchProjectAndApps();
+        } catch (e: any) { alert(e.message); }
+    };
+
+    const handleAddFingerprint = async () => {
+        if (!addingKeyTo) return;
+        setSavingKey(true);
+        try {
+            await api.post(`/projects/${projectId}/apps/${addingKeyTo}/fingerprints`, {
+                sha1: newSha1,
+                sha256: newSha256,
+                label: newKeyLabel
+            });
+            setNewSha1('');
+            setNewSha256('');
+            setNewKeyLabel('Debug');
+            setAddingKeyTo(null);
+            fetchProjectAndApps();
         } catch (error: any) {
-            alert('Failed to save keys: ' + error.message);
+            alert('Failed to save key: ' + error.message);
         } finally {
-            setSavingKeys(false);
+            setSavingKey(false);
         }
     };
 
-    const downloadConfig = () => {
-        if (!configJson) return;
-        const blob = new Blob([configJson], { type: "application/json" });
+    const handleDeleteFingerprint = async (appId: number, fId: number) => {
+        if (!confirm('Remove this fingerprint?')) return;
+        try {
+            await api.delete(`/projects/${projectId}/apps/${appId}/fingerprints/${fId}`);
+            fetchProjectAndApps();
+        } catch (e: any) { alert(e.message); }
+    };
+
+    const downloadConfig = (app: any) => {
+        const config = generateConfig(projectId, app.package_name, project?.google_client_id);
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -135,53 +155,53 @@ export default function ProjectDetails() {
     };
 
     if (loading) {
-        return <div className="p-8 text-center flex items-center justify-center h-screen">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+        return <div className="p-8 text-center flex items-center justify-center h-screen bg-[#020609]">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-600"></div>
         </div>;
     }
 
     return (
-        <div className="space-y-6 max-w-6xl mx-auto py-6">
+        <div className="space-y-8 max-w-6xl mx-auto py-10 px-6">
             {error ? (
-                <div className="bg-red-50 border border-red-200 text-red-700 p-10 rounded-2xl text-center shadow-lg">
-                    <Trash2 className="h-16 w-16 text-red-500 mx-auto mb-4" />
-                    <h2 className="text-2xl font-bold">Access Denied</h2>
-                    <p className="mt-2 text-red-600">{error}</p>
-                    <button onClick={() => router.push('/console')} className="mt-6 px-6 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors">
-                        Return to Projects
+                <div className="bg-red-50/10 border border-red-500/20 text-red-400 p-12 rounded-[40px] text-center shadow-2xl backdrop-blur-xl">
+                    <Trash2 className="h-20 w-20 text-red-500/50 mx-auto mb-6" />
+                    <h2 className="text-3xl font-black tracking-tight">Access Denied</h2>
+                    <p className="mt-3 text-red-400/70 font-medium">{error}</p>
+                    <button onClick={() => router.push('/console')} className="mt-8 px-10 py-3 bg-red-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20">
+                        Return to Dashboard
                     </button>
                 </div>
             ) : !project ? (
-                <div className="flex items-center justify-center py-20 text-gray-500">
-                    <RefreshCw className="h-8 w-8 animate-spin" />
+                <div className="flex items-center justify-center py-40">
+                    <RefreshCw className="h-10 w-10 text-orange-600 animate-spin" />
                 </div>
             ) : (
                 <>
-                    {/* Header */}
-                    <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-4">
-                            <Link href="/console" className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
-                                <ArrowLeft className="h-5 w-5" />
+                    {/* Modern Header */}
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white/5 p-10 rounded-[40px] border border-white/5 backdrop-blur-md">
+                        <div className="flex items-center gap-6">
+                            <Link href="/console" className="p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl transition-all text-gray-400">
+                                <ArrowLeft className="h-6 w-6" />
                             </Link>
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900 leading-tight">{project.name}</h1>
-                                <div className="flex items-center text-sm text-gray-500 mt-1">
-                                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium mr-3">{project.platform}</span>
-                                    <span className="font-mono text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 uppercase tracking-tight">ID: {project.project_id || projectId}</span>
+                                <h1 className="text-4xl font-black text-white tracking-tighter leading-none">{project.name}</h1>
+                                <div className="flex items-center gap-4 mt-3">
+                                    <span className="bg-orange-600/10 text-orange-500 border border-orange-600/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{project.platform}</span>
+                                    <span className="font-mono text-[10px] text-gray-500 bg-black/40 px-3 py-1 rounded-full border border-white/5 uppercase tracking-tighter shadow-inner">PROJ_ID: {project.project_id || projectId}</span>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="flex gap-4">
                             <button
                                 onClick={() => router.push(`/project/${projectId}/settings`)}
-                                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 shadow-sm transition-all"
+                                className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 text-xs font-black text-white uppercase tracking-widest transition-all"
                             >
                                 <Settings className="h-4 w-4" />
-                                Settings
+                                Project Settings
                             </button>
                             <button
                                 onClick={handleDeleteProject}
-                                className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium shadow-sm transition-all"
+                                className="flex items-center gap-2 px-6 py-3 bg-red-600/10 border border-red-600/20 text-red-500 rounded-2xl hover:bg-red-600/20 text-xs font-black uppercase tracking-widest transition-all"
                             >
                                 <Trash2 className="h-4 w-4" />
                                 Delete
@@ -189,195 +209,276 @@ export default function ProjectDetails() {
                         </div>
                     </div>
 
-                    {/* Content Grid */}
-                    <div className="grid gap-6 lg:grid-cols-3">
+                    {/* Content Section */}
+                    <div className="grid gap-8 lg:grid-cols-3">
 
-                        {/* Main Column: Platforms & Config */}
-                        < div className="lg:col-span-2 space-y-6" >
-
-                            {/* App Integration Section */}
-                            < div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" >
-                                <div className="border-b border-gray-100 p-5 bg-gray-50/50">
-                                    <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                                        <Smartphone className="h-5 w-5 text-gray-500" />
-                                        Platforms & Integration
-                                    </h2>
-                                    <p className="text-sm text-gray-500 mt-1">Manage your app's connection to SugunaBase.</p>
+                        {/* Apps Management */}
+                        <div className="lg:col-span-2 space-y-8">
+                            <div className="bg-[#0c1015] rounded-[48px] border border-white/5 shadow-2xl overflow-hidden">
+                                <div className="p-10 border-b border-white/5 bg-gradient-to-br from-white/[0.02] to-transparent">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                                                <Smartphone className="h-7 w-7 text-blue-500" />
+                                                My Applications
+                                            </h2>
+                                            <p className="text-gray-500 mt-2 font-medium">Link multiple Android/iOS apps to this project.</p>
+                                        </div>
+                                        {!isAddingApp && (
+                                            <button
+                                                onClick={() => setIsAddingApp(true)}
+                                                className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                                            >
+                                                Add App
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div className="p-6">
-                                    {configJson ? (
-                                        <div className="space-y-6">
-                                            {/* Connected App Status */}
-                                            <div className="flex items-center justify-between p-4 bg-green-50 border border-green-100 rounded-lg">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="h-12 w-12 bg-white rounded-lg border border-green-100 flex items-center justify-center text-green-600 shadow-sm">
-                                                        <Smartphone className="h-6 w-6" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-medium text-gray-900">Android App Connected</h3>
-                                                        <p className="text-sm text-gray-500 font-mono">{packageName}</p>
-                                                    </div>
+                                <div className="p-10 space-y-10">
+                                    {isAddingApp && (
+                                        <div className="bg-white/[0.02] p-8 rounded-[32px] border border-white/5 animate-in slide-in-from-top-4 duration-300">
+                                            <h3 className="text-white font-black text-sm uppercase tracking-widest mb-6">Register New App</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2">App Display Name</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. FriendZone Pro"
+                                                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-blue-500/50 outline-none transition-all placeholder:text-gray-700 font-bold"
+                                                        value={newAppName}
+                                                        onChange={(e) => setNewAppName(e.target.value)}
+                                                    />
                                                 </div>
-                                                <div className="hidden sm:block">
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                        Active
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {/* SHA Keys Configuration */}
-                                            <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
-                                                <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
-                                                    <Key className="h-4 w-4 text-gray-500" />
-                                                    App Signing Keys (SHA)
-                                                </h4>
-                                                <div className="space-y-4">
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">SHA-1 Certificate Fingerprint</label>
-                                                        <input
-                                                            type="text"
-                                                            className="w-full text-sm font-mono border-gray-300 rounded-md focus:border-orange-500 focus:ring-orange-500"
-                                                            placeholder="XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX"
-                                                            value={sha1}
-                                                            onChange={(e) => setSha1(e.target.value)}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">SHA-256 Certificate Fingerprint</label>
-                                                        <input
-                                                            type="text"
-                                                            className="w-full text-sm font-mono border-gray-300 rounded-md focus:border-orange-500 focus:ring-orange-500"
-                                                            placeholder="XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX"
-                                                            value={sha256}
-                                                            onChange={(e) => setSha256(e.target.value)}
-                                                        />
-                                                    </div>
-                                                    <div className="pt-2">
-                                                        <button
-                                                            onClick={handleSaveKeys}
-                                                            disabled={savingKeys}
-                                                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition shadow-sm"
-                                                        >
-                                                            <Save className="h-4 w-4" />
-                                                            {savingKeys ? 'Saving...' : 'Save Keys'}
-                                                        </button>
-                                                    </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2">Package Name</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="com.suguna.friendzone"
+                                                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-blue-500/50 outline-none transition-all placeholder:text-gray-700 font-bold"
+                                                        value={newPackageName}
+                                                        onChange={(e) => setNewPackageName(e.target.value)}
+                                                    />
                                                 </div>
                                             </div>
-
-                                            {/* Configuration Download */}
-                                            <div className="bg-blue-50/50 rounded-lg p-5 border border-blue-100">
-                                                <h4 className="font-medium text-gray-900 mb-2">Setup Instructions</h4>
-                                                <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2 mb-4">
-                                                    <li>Download the <strong>suguna-services.json</strong> file below.</li>
-                                                    <li>Place it in your Android project's <strong>app/src/main/assets</strong> folder.</li>
-                                                    <li>Initialize the SugunaBase client in your Application class.</li>
-                                                </ol>
+                                            <div className="flex gap-4">
                                                 <button
-                                                    onClick={downloadConfig}
-                                                    className="inline-flex items-center gap-2 bg-orange-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-orange-700 transition shadow-sm"
+                                                    onClick={handleAddApp}
+                                                    className="flex-1 px-8 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
                                                 >
-                                                    <Download className="h-4 w-4" />
-                                                    Download Configuration
+                                                    Register App
+                                                </button>
+                                                <button
+                                                    onClick={() => setIsAddingApp(false)}
+                                                    className="px-8 py-4 bg-white/5 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-white/10 transition-all"
+                                                >
+                                                    Cancel
                                                 </button>
                                             </div>
                                         </div>
+                                    )}
+
+                                    {apps.length === 0 && !isAddingApp ? (
+                                        <div className="text-center py-20 bg-black/20 rounded-[40px] border-2 border-dashed border-white/5">
+                                            <Smartphone className="h-16 w-16 text-gray-800 mx-auto mb-6" />
+                                            <h3 className="text-xl font-black text-gray-500">No Apps Linked</h3>
+                                            <p className="text-gray-700 text-sm mt-2 font-bold uppercase tracking-tight">Add your first platform to get started</p>
+                                        </div>
                                     ) : (
-                                        <div className="text-center py-6">
-                                            <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4 ring-8 ring-gray-50">
-                                                <Smartphone className="h-8 w-8 text-gray-400" />
-                                            </div>
-                                            <h3 className="text-lg font-medium text-gray-900 mb-1">Add your Android App</h3>
-                                            <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
-                                                Link your Android application to generate configuration files and start using backend services.
-                                            </p>
+                                        <div className="space-y-6">
+                                            {apps.map((app) => (
+                                                <div key={app.id} className="bg-white/[0.02] border border-white/5 rounded-[32px] overflow-hidden group">
+                                                    <div className="p-8 flex items-center justify-between border-b border-white/[0.02] bg-white/[0.01]">
+                                                        <div className="flex items-center gap-5">
+                                                            <div className="h-14 w-14 bg-blue-600/10 border border-blue-600/20 rounded-2xl flex items-center justify-center text-blue-500 shadow-lg shadow-blue-500/5 transition-transform group-hover:scale-110">
+                                                                <Smartphone className="h-7 w-7" />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-lg font-black text-white tracking-tight">{app.app_name}</h3>
+                                                                <code className="text-[11px] text-gray-500 font-bold uppercase tracking-tight">{app.package_name}</code>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <button
+                                                                onClick={() => downloadConfig(app)}
+                                                                className="p-3 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                                                                title="Download Config"
+                                                            >
+                                                                <Download className="h-5 w-5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteApp(app.id)}
+                                                                className="p-3 bg-rose-500/5 text-rose-500/40 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
+                                                            >
+                                                                <Trash2 className="h-5 w-5" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
 
-                                            {isAddingApp ? (
-                                                <div className="max-w-md mx-auto bg-gray-50 p-6 rounded-xl border border-gray-200 animate-in fade-in zoom-in duration-200">
-                                                    <label className="block text-left text-sm font-medium text-gray-700 mb-1.5">Package Name</label>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="e.g. com.suguna.friendzone"
-                                                        className="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 text-sm py-2.5"
-                                                        autoFocus
-                                                        value={packageName}
-                                                        onChange={(e) => setPackageName(e.target.value)}
-                                                    />
-                                                    <p className="text-xs text-left text-gray-500 mt-1 mb-4">Must match your AndroidManifest.xml package.</p>
+                                                    <div className="p-8">
+                                                        <div className="space-y-4">
+                                                            <div className="flex justify-between items-center mb-4">
+                                                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Certificate Fingerprints ({app.fingerprints?.length || 0})</span>
+                                                                <button
+                                                                    onClick={() => setAddingKeyTo(app.id)}
+                                                                    className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:underline"
+                                                                >
+                                                                    + Add Signature
+                                                                </button>
+                                                            </div>
 
-                                                    <div className="flex gap-3">
-                                                        <button
-                                                            onClick={handleAddApp}
-                                                            disabled={!packageName}
-                                                            className="flex-1 bg-gray-900 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                                                        >
-                                                            Register & Connect
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setIsAddingApp(false)}
-                                                            className="px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-                                                        >
-                                                            Cancel
-                                                        </button>
+                                                            {app.fingerprints?.map((f: any) => (
+                                                                <div key={f.id} className="p-5 bg-black/40 border border-white/5 rounded-2xl flex items-center justify-between group/key transition-all hover:bg-black/60">
+                                                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                                        <div className="min-w-[120px]">
+                                                                            <span className="px-2.5 py-1 bg-white/5 rounded-lg text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">{f.label}</span>
+                                                                        </div>
+                                                                        <div className="md:col-span-2 space-y-2">
+                                                                            {f.sha1 && <div className="flex items-center gap-3">
+                                                                                <span className="text-[9px] font-black text-gray-600 uppercase">SHA-1:</span>
+                                                                                <code className="text-[11px] text-gray-400 font-mono truncate">{f.sha1}</code>
+                                                                            </div>}
+                                                                            {f.sha256 && <div className="flex items-center gap-3">
+                                                                                <span className="text-[9px] font-black text-gray-600 uppercase">SHA-256:</span>
+                                                                                <code className="text-[11px] text-gray-400 font-mono truncate">{f.sha256}</code>
+                                                                            </div>}
+                                                                        </div>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleDeleteFingerprint(app.id, f.id)}
+                                                                        className="p-2.5 text-gray-600 hover:text-rose-500 transition-colors opacity-0 group-hover/key:opacity-100"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+
+                                                            {addingKeyTo === app.id && (
+                                                                <div className="mt-6 p-8 bg-blue-600/[0.03] border border-blue-600/10 rounded-[32px] animate-in zoom-in duration-200">
+                                                                    <div className="flex justify-between items-center mb-6">
+                                                                        <h4 className="text-xs font-black text-white uppercase tracking-widest">New SHA Signature</h4>
+                                                                        <button onClick={() => setAddingKeyTo(null)} className="text-gray-500 hover:text-white transition-colors">✕</button>
+                                                                    </div>
+                                                                    <div className="space-y-5">
+                                                                        <div className="grid grid-cols-2 gap-4">
+                                                                            <div className="space-y-2">
+                                                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Environment</label>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    placeholder="Debug / Production"
+                                                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-xs outline-none focus:border-blue-500/50"
+                                                                                    value={newKeyLabel}
+                                                                                    onChange={(e) => setNewKeyLabel(e.target.value)}
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-1 Fingerprint</label>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    placeholder="XX:XX:XX:..."
+                                                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
+                                                                                    value={newSha1}
+                                                                                    onChange={(e) => setNewSha1(e.target.value)}
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="space-y-2">
+                                                                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-256 (Recommended)</label>
+                                                                            <input
+                                                                                type="text"
+                                                                                placeholder="XX:XX:XX:..."
+                                                                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
+                                                                                value={newSha256}
+                                                                                onChange={(e) => setNewSha256(e.target.value)}
+                                                                            />
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={handleAddFingerprint}
+                                                                            disabled={savingKey}
+                                                                            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all"
+                                                                        >
+                                                                            {savingKey ? 'Verifying...' : 'Authenticate & Save Key'}
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            ) : (
-                                                <button
-                                                    onClick={() => setIsAddingApp(true)}
-                                                    className="inline-flex items-center gap-2 bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-700 transition shadow-sm"
-                                                >
-                                                    <Smartphone className="h-4 w-4" />
-                                                    Add Platform
-                                                </button>
-                                            )}
+                                            ))}
                                         </div>
                                     )}
                                 </div>
-                            </div >
+                            </div>
 
-                            {/* Database Section */}
-                            < div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex items-center justify-between" >
-                                <div className="flex items-center gap-4">
-                                    <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600">
-                                        <Box className="h-5 w-5" />
+                            {/* Service Quick Links */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-[#12161c] rounded-[40px] border border-white/5 p-8 flex items-center justify-between group cursor-pointer hover:bg-[#161b22] transition-all">
+                                    <div className="flex items-center gap-5">
+                                        <div className="h-14 w-14 bg-purple-600/10 border border-purple-600/20 rounded-2xl flex items-center justify-center text-purple-500 shadow-xl shadow-purple-500/5">
+                                            <Box className="h-7 w-7" />
+                                        </div>
+                                        <div>
+                                            <h2 className="font-black text-white tracking-tight">Suguna Firestore</h2>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter mt-1">Real-time Document Store</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h2 className="font-semibold text-gray-900">Database</h2>
-                                        <p className="text-sm text-gray-500">Manage collections and documents</p>
-                                    </div>
+                                    <ArrowLeft className="h-5 w-5 text-gray-700 rotate-180 group-hover:translate-x-1 transition-transform" />
                                 </div>
-                                <button className="text-sm font-medium text-orange-600 hover:text-orange-700 hover:underline">
-                                    Open Visual Editor →
-                                </button>
-                            </div >
-                        </div >
-
-                        {/* Right Sidebar: Stats & Info */}
-                        < div className="space-y-6" >
-                            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-6">Quick Stats</h3>
-                                <div className="space-y-6">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-gray-500 text-sm">Active Users</span>
-                                        <span className="text-xl font-bold text-gray-900">{project.usersCount || 0}</span>
+                                <div
+                                    onClick={() => router.push(`/project/${projectId}/cast`)}
+                                    className="bg-[#12161c] rounded-[40px] border border-white/5 p-8 flex items-center justify-between group cursor-pointer hover:bg-[#161b22] transition-all"
+                                >
+                                    <div className="flex items-center gap-5">
+                                        <div className="h-14 w-14 bg-emerald-600/10 border border-emerald-600/20 rounded-2xl flex items-center justify-center text-emerald-500 shadow-xl shadow-emerald-500/5">
+                                            <RefreshCw className="h-7 w-7" />
+                                        </div>
+                                        <div>
+                                            <h2 className="font-black text-white tracking-tight">Suguna Cast</h2>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter mt-1">Media & Analytics</p>
+                                        </div>
                                     </div>
-                                    <div className="h-px bg-gray-100"></div>
+                                    <ArrowLeft className="h-5 w-5 text-gray-700 rotate-180 group-hover:translate-x-1 transition-transform" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modern Sidebar */}
+                        <div className="space-y-8">
+                            <div className="bg-[#0c1015] rounded-[48px] border border-white/5 shadow-2xl p-10">
+                                <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.3em] mb-8">Performance</h3>
+                                <div className="space-y-8">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-gray-500 text-sm">Revenue</span>
-                                        <span className="text-xl font-bold text-gray-900">₹{project.revenue || 0}</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Active Developers</span>
+                                            <span className="text-sm font-bold text-white">Live Monitoring</span>
+                                        </div>
+                                        <span className="text-4xl font-black text-white tracking-tighter">{project.usersCount || 0}</span>
+                                    </div>
+                                    <div className="h-px bg-white/[0.03]"></div>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">API Requests</span>
+                                            <span className="text-sm font-bold text-white">Last 24 Hours</span>
+                                        </div>
+                                        <span className="text-2xl font-black text-emerald-500 tracking-tighter">Healthy</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-gradient-to-br from-[#1a3449] to-[#0f1f2d] rounded-xl p-6 text-white shadow-lg">
-                                <h3 className="font-bold mb-2 text-lg">Developer Guide</h3>
-                                <p className="text-sm text-gray-300 mb-6 leading-relaxed">
-                                    Learn how to integrate the SugunaBase SDK into your Android application securely.
-                                </p>
-                                <a href="/docs/android" className="block w-full text-center bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg py-2.5 text-sm font-medium transition backdrop-blur-sm">
-                                    View Documentation
-                                </a>
+                            <div className="bg-gradient-to-br from-[#1a3449] to-[#0f1f2d] rounded-[48px] p-10 text-white shadow-2xl relative overflow-hidden group">
+                                <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform duration-700">
+                                    <Box className="h-60 w-60" />
+                                </div>
+                                <div className="relative z-10">
+                                    <h3 className="text-2xl font-black tracking-tight mb-4">Architectural Ready</h3>
+                                    <p className="text-sm text-gray-300 font-medium mb-10 leading-relaxed">
+                                        Your multi-app configuration is now live. Each app validated by unique SHA signatures.
+                                    </p>
+                                    <a href="/docs/android" className="block w-full text-center bg-white text-black rounded-[24px] py-4 text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-black/20">
+                                        SDK Implementation
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
