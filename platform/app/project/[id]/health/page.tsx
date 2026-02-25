@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { api } from '@/utils/api';
 import {
     Activity,
     CheckCircle2,
@@ -37,28 +38,13 @@ export default function HealthPage() {
 
     const checkHealth = async () => {
         setLoading(true);
-        const results: Record<string, any> = {};
-
-        for (const service of SERVICES) {
-            try {
-                const start = Date.now();
-                const res = await fetch(`http://localhost:${service.port}/health`, {
-                    mode: 'cors',
-                    cache: 'no-store'
-                });
-                const latency = Date.now() - start;
-
-                if (res.ok) {
-                    const data = await res.json();
-                    results[service.id] = { status: 'UP', latency, ...data };
-                } else {
-                    results[service.id] = { status: 'DOWN', error: `HTTP ${res.status}` };
-                }
-            } catch (e) {
-                results[service.id] = { status: 'DOWN', error: 'Connection Failed' };
-            }
+        try {
+            // Fetch unified health from the Gateway
+            const results = await api.get('/cluster-health');
+            setStatuses(results);
+        } catch (e) {
+            console.error("Health Check Failed:", e);
         }
-        setStatuses(results);
         setLoading(false);
     };
 

@@ -593,6 +593,34 @@ const logToSystem = (projectId, service, level, message) => {
 
 app.get('/health', (req, res) => res.json({ status: 'UP', service: 'Suguna Gateway' }));
 
+app.get('/v1/cluster-health', async (req, res) => {
+    const services = [
+        { id: 'gateway', name: 'Gateway', port: 5000 },
+        { id: 'auth', name: 'Auth', port: 3300 },
+        { id: 'firestore', name: 'Firestore', port: 3400 },
+        { id: 'messaging', name: 'Messaging', port: 3200 },
+        { id: 'storage', name: 'Storage', port: 3500 },
+        { id: 'hosting', name: 'Hosting', port: 3600 },
+        { id: 'logs', name: 'Logs', port: 3700 },
+        { id: 'functions', name: 'Functions', port: 3005 },
+        { id: 'cast', name: 'Cast', port: 3100 }
+    ];
+
+    const results = {};
+    const checks = services.map(async (s) => {
+        try {
+            const start = Date.now();
+            const response = await axios.get(`http://localhost:${s.port}/health`, { timeout: 2000 });
+            results[s.id] = { status: 'UP', latency: Date.now() - start, ...response.data };
+        } catch (e) {
+            results[s.id] = { status: 'DOWN', error: e.message };
+        }
+    });
+
+    await Promise.all(checks);
+    res.json(results);
+});
+
 app.get('/v1/health', (req, res) => res.json({ status: 'OK', msg: 'SugunaBase Live!' }));
 
 // Check Project Status for App (Public Route)
