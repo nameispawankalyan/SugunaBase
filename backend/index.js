@@ -105,8 +105,8 @@ const resolveProject = async (req, res, next) => {
     try {
         const isNumeric = /^\d+$/.test(projectIdRaw);
         const query = isNumeric
-            ? 'SELECT * FROM projects WHERE id = $1'
-            : 'SELECT * FROM projects WHERE project_id = $1';
+            ? `SELECT p.*, (SELECT ARRAY_AGG(DISTINCT platform) FROM project_apps WHERE project_id = p.id) as platforms FROM projects p WHERE p.id = $1`
+            : `SELECT p.*, (SELECT ARRAY_AGG(DISTINCT platform) FROM project_apps WHERE project_id = p.id) as platforms FROM projects p WHERE p.project_id = $1`;
 
         const result = await pool.query(query, [projectIdRaw]);
 
@@ -372,10 +372,22 @@ const initDB = async () => {
                 app_id INTEGER REFERENCES project_apps(id) ON DELETE CASCADE,
                 sha1 VARCHAR(255),
                 sha256 VARCHAR(255),
+                bundle_id VARCHAR(255),
+                team_id VARCHAR(50),
                 label VARCHAR(100),
+                is_production BOOLEAN DEFAULT FALSE,
+                custom_data JSONB DEFAULT '{}',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+
+        // Migration for app_fingerprints extra columns
+        try {
+            await pool.query('ALTER TABLE app_fingerprints ADD COLUMN IF NOT EXISTS bundle_id VARCHAR(255);');
+            await pool.query('ALTER TABLE app_fingerprints ADD COLUMN IF NOT EXISTS team_id VARCHAR(50);');
+            await pool.query('ALTER TABLE app_fingerprints ADD COLUMN IF NOT EXISTS is_production BOOLEAN DEFAULT FALSE;');
+            await pool.query('ALTER TABLE app_fingerprints ADD COLUMN IF NOT EXISTS custom_data JSONB DEFAULT \'{}\';');
+        } catch (e) { }
 
         // Migration for existing project apps
         try {
@@ -859,12 +871,15 @@ app.get('/v1/me', authenticateToken, async (req, res) => {
 });
 
 // Get User's Projects
-app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
+app.get('/v1/projects', authenticateToken, async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC',
-            [req.user.id] // user.id from Token
-        );
+        const result = await pool.query(`
+            SELECT p.*, 
+            (SELECT ARRAY_AGG(DISTINCT platform) FROM project_apps WHERE project_id = p.id) as platforms
+            FROM projects p 
+            WHERE p.user_id = $1 
+            ORDER BY p.created_at DESC
+        `, [req.user.id]);
         res.json({ projects: result.rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -922,17 +937,7 @@ app.get('/v1/projects/:id/users', authenticateToken, resolveProject, async (req,
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/v1/projects/:id/apps', authenticateToken, resolveProject, async (req, res) => {
-    const { package_name } = req.body;
-    try {
-        const result = await pool.query(
-            'UPDATE projects SET package_name = $1 WHERE id = $2 RETURNING *',
-            [package_name, req.project.id]
-        );
-        io.to(req.user.id.toString()).emit("project_updated", result.rows[0]);
-        res.json(result.rows[0]);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// DELETED REDUNDANT ROUTE (Moved to line 992 logic)
 
 // Update Project SHA Keys
 app.put('/v1/projects/:id/sha', authenticateToken, resolveProject, async (req, res) => {
@@ -995,13 +1000,13 @@ app.delete('/v1/projects/:id/apps/:appId', authenticateToken, resolveProject, as
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ADD FINGERPRINT TO APP
+// ADD FINGERPRINT/KEY TO APP
 app.post('/v1/projects/:id/apps/:appId/fingerprints', authenticateToken, resolveProject, async (req, res) => {
-    const { sha1, sha256, label } = req.body;
+    const { sha1, sha256, bundle_id, team_id, label, is_production, custom_data } = req.body;
     try {
         const result = await pool.query(
-            'INSERT INTO app_fingerprints (app_id, sha1, sha256, label) VALUES ($1, $2, $3, $4) RETURNING *',
-            [req.params.appId, sha1, sha256, label || 'Development']
+            'INSERT INTO app_fingerprints (app_id, sha1, sha256, bundle_id, team_id, label, is_production, custom_data) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            [req.params.appId, sha1, sha256, bundle_id, team_id, label || 'Default', is_production || false, custom_data || {}]
         );
         res.status(201).json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1033,44 +1038,50 @@ app.post('/v1/projects/:id/keys/rotate', authenticateToken, resolveProject, asyn
 
 // Delete Project
 
-// Download Config JSON (Suguna Services) - Endpoint to generate the file
+// Download Config JSON (Suguna Services) - Enhanced for Multi-Platform
 app.get('/v1/projects/:id/config', authenticateToken, resolveProject, async (req, res) => {
     try {
         const project = req.project;
 
-        // Construct the JSON structure similar to google-services.json but for SugunaBase
+        // Fetch all apps and their keys
+        const appsResult = await pool.query('SELECT * FROM project_apps WHERE project_id = $1', [project.id]);
+        const apps = await Promise.all(appsResult.rows.map(async (app) => {
+            const keys = await pool.query('SELECT * FROM app_fingerprints WHERE app_id = $1', [app.id]);
+            return { ...app, keys: keys.rows };
+        }));
+
         const config = {
             "project_info": {
-                "project_id": project.project_id || project.id,
+                "project_id": project.project_id || project.id.toString(),
                 "project_name": project.name,
-                "package_name": project.package_name
+                "project_number": "1",
+                "endpoint": "https://api.suguna.co/v1"
             },
-            "client": {
-                "oauth_client": {
-                    "client_id": project.google_client_id
+            "client": apps.map(app => ({
+                "client_info": {
+                    "mobilesdk_app_id": `sugunabase:${project.id}:${app.id}`,
+                    "android_client_info": app.platform === 'android' ? { "package_name": app.package_name } : undefined,
+                    "ios_client_info": app.platform === 'ios' ? { "bundle_id": app.package_name } : undefined,
                 },
-                "api_key": {
-                    "current_key": "TODO_IF_NEEDED"
-                },
+                "platform": app.platform,
                 "services": {
-                    "sugunabase": {
-                        "base_url": "http://api.suguna.co/" // Use designated API hostname
-                    }
+                    "sugunabase": { "base_url": "https://api.suguna.co/" }
                 },
-                "app_integrity": {
-                    "sha1_fingerprint": project.sha1_fingerprint,
-                    "sha256_fingerprint": project.sha256_fingerprint
-                }
-            }
+                "api_key": [{ "current_key": project.api_secret }],
+                "fingerprints": app.keys.map(k => ({
+                    "label": k.label,
+                    "sha1": k.sha1,
+                    "sha256": k.sha256,
+                    "bundle_id": k.bundle_id,
+                    "team_id": k.team_id
+                }))
+            }))
         };
 
-        // If requested to download as file
         if (req.query.download === 'true') {
-            res.header('Content-Disposition', 'attachment; filename="suguna-services.json"');
+            res.header('Content-Disposition', `attachment; filename="suguna-services.json"`);
         }
-
         res.json(config);
-
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

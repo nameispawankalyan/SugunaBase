@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { api } from '@/utils/api';
-import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2, RefreshCw, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2, RefreshCw, AlertCircle, CheckCircle2, X, Globe } from 'lucide-react';
 import Link from 'next/link';
 
 // Config Object Generator
@@ -108,17 +108,21 @@ export default function ProjectDetails() {
     const [newAppName, setNewAppName] = useState('');
     const [newPackageName, setNewPackageName] = useState('');
     const [newAppPlatform, setNewAppPlatform] = useState('android');
+    // Key addition states
+    const [newSha1, setNewSha1] = useState('');
+    const [newSha256, setNewSha256] = useState('');
+    const [newBundleId, setNewBundleId] = useState('');
+    const [newTeamId, setNewTeamId] = useState('');
+    const [newKeyLabel, setNewKeyLabel] = useState('Debug');
+    const [customData, setCustomData] = useState('');
+
     const [error, setError] = useState<string | null>(null);
 
     // Modal & Toast State
     const [modal, setModal] = useState<any>({ isOpen: false });
     const [toast, setToast] = useState<any>(null);
 
-    // Fingerprint State
     const [addingKeyTo, setAddingKeyTo] = useState<number | null>(null);
-    const [newKeyLabel, setNewKeyLabel] = useState('Debug');
-    const [newSha1, setNewSha1] = useState('');
-    const [newSha256, setNewSha256] = useState('');
     const [savingKey, setSavingKey] = useState(false);
 
     const fetchProjectAndApps = async () => {
@@ -197,10 +201,16 @@ export default function ProjectDetails() {
             await api.post(`/projects/${projectId}/apps/${addingKeyTo}/fingerprints`, {
                 sha1: newSha1,
                 sha256: newSha256,
-                label: newKeyLabel
+                bundle_id: newBundleId,
+                team_id: newTeamId,
+                label: newKeyLabel,
+                custom_data: customData ? JSON.parse(customData) : {}
             });
             setNewSha1('');
             setNewSha256('');
+            setNewBundleId('');
+            setNewTeamId('');
+            setCustomData('');
             setNewKeyLabel('Debug');
             setAddingKeyTo(null);
             await fetchProjectAndApps();
@@ -230,17 +240,21 @@ export default function ProjectDetails() {
         });
     };
 
-    const downloadConfig = (app: any) => {
-        const config = generateConfig(projectId, app.package_name, project?.google_client_id);
-        const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${app.package_name}-suguna-services.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        showToast('Config downloaded');
+    const downloadConfig = async (app: any) => {
+        try {
+            const config = await api.get(`/projects/${projectId}/config`);
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `suguna-services.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('Config downloaded');
+        } catch (e: any) {
+            showToast('Failed to download config: ' + e.message, 'error');
+        }
     };
 
     const handleDeleteProject = () => {
@@ -296,9 +310,11 @@ export default function ProjectDetails() {
                             </Link>
                             <div>
                                 <h1 className="text-4xl font-black text-white tracking-tighter leading-none">{project.name}</h1>
-                                <div className="flex items-center gap-4 mt-3">
-                                    <span className="bg-blue-600/10 text-blue-500 border border-blue-600/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{project.platform}</span>
-                                    <span className="font-mono text-[10px] text-gray-400 bg-white/5 px-3 py-1 rounded-full border border-white/5 uppercase tracking-tighter shadow-inner">ID: {project.project_id || projectId}</span>
+                                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                                    {(project.platforms || ['Android']).map((p: string) => (
+                                        <span key={p} className="bg-blue-600/10 text-blue-500 border border-blue-600/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{p}</span>
+                                    ))}
+                                    <span className="font-mono text-[10px] text-gray-400 bg-white/5 px-3 py-1 rounded-full border border-white/5 uppercase tracking-tighter shadow-inner ml-2">ID: {project.project_id || projectId}</span>
                                 </div>
                             </div>
                         </div>
@@ -379,13 +395,18 @@ export default function ProjectDetails() {
                                             <div className="mb-8">
                                                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2 block mb-3">Target Platform</label>
                                                 <div className="grid grid-cols-3 gap-3">
-                                                    {['android', 'ios', 'web'].map(p => (
+                                                    {[
+                                                        { id: 'android', icon: Smartphone, label: 'Android' },
+                                                        { id: 'ios', icon: Box, label: 'iOS' }, // Apple not imported, but Box/Smartphone used before. I will use icons I have.
+                                                        { id: 'web', icon: Globe, label: 'Web' }
+                                                    ].map(({ id: p, icon: Icon, label }) => (
                                                         <button
                                                             key={p}
                                                             onClick={() => setNewAppPlatform(p)}
-                                                            className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${newAppPlatform === p ? 'border-blue-600 bg-blue-600/10 text-blue-500' : 'border-white/5 text-gray-500 bg-white/[0.02]'}`}
+                                                            className={`py-4 flex flex-col items-center gap-2 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all border-2 ${newAppPlatform === p ? 'border-blue-600 bg-blue-600/10 text-blue-500 shadow-lg shadow-blue-500/10' : 'border-white/5 text-gray-600 bg-white/[0.02] hover:bg-white/[0.04]'}`}
                                                         >
-                                                            {p}
+                                                            <Icon className={`h-5 w-5 ${newAppPlatform === p ? 'text-blue-500' : 'text-gray-700'}`} />
+                                                            {label}
                                                         </button>
                                                     ))}
                                                 </div>
@@ -420,7 +441,7 @@ export default function ProjectDetails() {
                                                     <div className="p-8 flex items-center justify-between border-b border-white/[0.02] bg-white/[0.01]">
                                                         <div className="flex items-center gap-5">
                                                             <div className="h-14 w-14 bg-blue-600/10 border border-blue-600/20 rounded-2xl flex items-center justify-center text-blue-500 shadow-lg shadow-blue-500/5 transition-transform group-hover:scale-110">
-                                                                <Smartphone className="h-7 w-7" />
+                                                                {app.platform === 'web' ? <Globe className="h-7 w-7" /> : <Smartphone className="h-7 w-7" />}
                                                             </div>
                                                             <div>
                                                                 <h3 className="text-lg font-black text-white tracking-tight">{app.app_name}</h3>
@@ -448,12 +469,12 @@ export default function ProjectDetails() {
                                                     <div className="p-8 bg-black/20">
                                                         <div className="space-y-4">
                                                             <div className="flex justify-between items-center mb-4">
-                                                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">SHA Fingerprints ({app.fingerprints?.length || 0})</span>
+                                                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{app.platform === 'web' ? 'Authorized Domains' : 'Linked Credentials'} ({app.fingerprints?.length || 0})</span>
                                                                 <button
                                                                     onClick={() => setAddingKeyTo(app.id)}
                                                                     className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:underline"
                                                                 >
-                                                                    + Add Signature
+                                                                    {app.platform === 'web' ? '+ Add Domain' : '+ Add Key'}
                                                                 </button>
                                                             </div>
 
@@ -472,6 +493,20 @@ export default function ProjectDetails() {
                                                                                 <span className="text-[9px] font-black text-gray-600 uppercase">SHA-256:</span>
                                                                                 <code className="text-[11px] text-gray-400 font-mono truncate">{f.sha256}</code>
                                                                             </div>}
+                                                                            {f.team_id && <div className="flex items-center gap-3">
+                                                                                <span className="text-[9px] font-black text-gray-600 uppercase">Team ID:</span>
+                                                                                <code className="text-[11px] text-gray-400 font-mono">{f.team_id}</code>
+                                                                            </div>}
+                                                                            {f.bundle_id && <div className="flex items-center gap-3">
+                                                                                <span className="text-[9px] font-black text-gray-600 uppercase">Bundle ID:</span>
+                                                                                <code className="text-[11px] text-gray-400 font-mono">{f.bundle_id}</code>
+                                                                            </div>}
+                                                                            {app.platform === 'web' && f.custom_data && (
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <span className="text-[9px] font-black text-gray-600 uppercase">Origin:</span>
+                                                                                    <code className="text-[11px] text-gray-400 font-mono uppercase">{typeof f.custom_data === 'string' ? f.custom_data : JSON.stringify(f.custom_data)}</code>
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                     <button
@@ -490,37 +525,80 @@ export default function ProjectDetails() {
                                                                         <button onClick={() => setAddingKeyTo(null)} className="text-gray-500 hover:text-white transition-colors">✕</button>
                                                                     </div>
                                                                     <div className="space-y-5">
-                                                                        <div className="grid grid-cols-2 gap-4">
-                                                                            <div className="space-y-2">
-                                                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Environment</label>
-                                                                                <input
-                                                                                    type="text"
-                                                                                    placeholder="Debug / Production"
-                                                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-xs outline-none focus:border-blue-500/50"
-                                                                                    value={newKeyLabel}
-                                                                                    onChange={(e) => setNewKeyLabel(e.target.value)}
-                                                                                />
+                                                                        <div className="space-y-4">
+                                                                            <div className="grid grid-cols-2 gap-4">
+                                                                                <div className="space-y-2">
+                                                                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Environment</label>
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        placeholder="Debug / Production"
+                                                                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-xs outline-none focus:border-blue-500/50"
+                                                                                        value={newKeyLabel}
+                                                                                        onChange={(e) => setNewKeyLabel(e.target.value)}
+                                                                                    />
+                                                                                </div>
+
+                                                                                {app.platform === 'ios' ? (
+                                                                                    <div className="space-y-2">
+                                                                                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Team ID</label>
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            placeholder="ABC123XYZ"
+                                                                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
+                                                                                            value={newTeamId}
+                                                                                            onChange={(e) => setNewTeamId(e.target.value)}
+                                                                                        />
+                                                                                    </div>
+                                                                                ) : app.platform === 'web' ? (
+                                                                                    <div className="space-y-2">
+                                                                                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Authorized Origin</label>
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            placeholder="https://example.com"
+                                                                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
+                                                                                            value={customData}
+                                                                                            onChange={(e) => setCustomData(e.target.value)}
+                                                                                        />
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="space-y-2">
+                                                                                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-1</label>
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            placeholder="XX:XX:XX:..."
+                                                                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
+                                                                                            value={newSha1}
+                                                                                            onChange={(e) => setNewSha1(e.target.value)}
+                                                                                        />
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
-                                                                            <div className="space-y-2">
-                                                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-1</label>
-                                                                                <input
-                                                                                    type="text"
-                                                                                    placeholder="XX:XX:XX:..."
-                                                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
-                                                                                    value={newSha1}
-                                                                                    onChange={(e) => setNewSha1(e.target.value)}
-                                                                                />
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="space-y-2">
-                                                                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-256 (Recommended)</label>
-                                                                            <input
-                                                                                type="text"
-                                                                                placeholder="XX:XX:XX:..."
-                                                                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
-                                                                                value={newSha256}
-                                                                                onChange={(e) => setNewSha256(e.target.value)}
-                                                                            />
+
+                                                                            {app.platform === 'android' && (
+                                                                                <div className="space-y-2">
+                                                                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-256 (Recommended)</label>
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        placeholder="XX:XX:XX:..."
+                                                                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
+                                                                                        value={newSha256}
+                                                                                        onChange={(e) => setNewSha256(e.target.value)}
+                                                                                    />
+                                                                                </div>
+                                                                            )}
+
+                                                                            {app.platform === 'ios' && (
+                                                                                <div className="space-y-2">
+                                                                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Bundle ID</label>
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        placeholder="com.example.app.ios"
+                                                                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-[10px] font-mono outline-none focus:border-blue-500/50"
+                                                                                        value={newBundleId}
+                                                                                        onChange={(e) => setNewBundleId(e.target.value)}
+                                                                                    />
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                         <div className="flex gap-4">
                                                                             <button

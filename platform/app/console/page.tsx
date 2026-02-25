@@ -406,15 +406,25 @@ export default function Dashboard() {
                             )}
 
                             <div className="flex items-center gap-5 mb-8">
-                                <div className={`p-4 rounded-2xl ${project.platform === 'Android' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                                    {project.platform === 'Android' ? <Smartphone className="h-6 w-6" /> : <Globe className="h-6 w-6" />}
+                                <div className={`p-4 rounded-2xl bg-orange-50 text-orange-600 shadow-inner`}>
+                                    <Box className="h-6 w-6" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-black text-xl text-gray-900 truncate">{project.name}</h3>
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">{project.project_id}</p>
-                                        <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{project.platform}</p>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none">{project.project_id}</p>
+                                        <span className="w-1.5 h-1.5 bg-gray-200 rounded-full"></span>
+                                        <div className="flex gap-1 flex-wrap">
+                                            {project.platforms && project.platforms.length > 0 ? (
+                                                project.platforms.map((p: string) => (
+                                                    <span key={p} className="text-[8px] font-black text-gray-400 bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded-md uppercase tracking-tighter">
+                                                        {p}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-[8px] font-black text-gray-300 uppercase italic">No Apps Linked</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <button
@@ -423,7 +433,7 @@ export default function Dashboard() {
                                         e.stopPropagation();
                                         handleDeleteProject(project);
                                     }}
-                                    className="p-3 bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-2xl transition-all z-20 opacity-0 group-hover:opacity-100"
+                                    className="p-3 bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-2xl transition-all z-20 opacity-0 group-hover:opacity-100 shadow-sm"
                                 >
                                     <Trash2 className="h-5 w-5" />
                                 </button>
