@@ -141,6 +141,7 @@ const initDB = async () => {
                 package_name VARCHAR(255),
                 google_sign_in_enabled BOOLEAN DEFAULT FALSE,
                 google_client_id VARCHAR(255),
+                project_id VARCHAR(100) UNIQUE,
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -148,6 +149,19 @@ const initDB = async () => {
         // Migration for project features
         try {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_sign_in_enabled BOOLEAN DEFAULT FALSE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_id VARCHAR(100) UNIQUE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
+
+            // Backfill project_id for old projects if any
+            await pool.query(`UPDATE projects SET project_id = 'project-' || id WHERE project_id IS NULL;`);
+        } catch (e) { }
+
+        // Ensure all users have a role and are active
+        try {
+            await pool.query(`UPDATE users SET role = 'developer' WHERE role IS NULL;`);
+            await pool.query(`UPDATE users SET is_active = TRUE WHERE is_active IS NULL;`);
+        } catch (e) { }
+        try {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_client_id VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha1_fingerprint VARCHAR(255);`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS sha256_fingerprint VARCHAR(255);`);
@@ -727,12 +741,16 @@ app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
 app.post('/v1/projects', authenticateToken, async (req, res) => {
     const { name, platform, google_client_id } = req.body;
     try {
-        const appId = require('crypto').randomBytes(16).toString('hex');
-        const apiSecret = require('crypto').randomBytes(16).toString('hex');
+        const userId = req.user.id;
+
+        // Generate Firebase-like project ID
+        const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+        const projectIdForApp = `${slug}-${randomSuffix}`;
 
         const result = await pool.query(
-            'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id, app_id, api_secret) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-            [name, platform, req.user.id, !!google_client_id, google_client_id, appId, apiSecret]
+            'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id, app_id, api_secret, project_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            [name, platform || 'Android', userId, !!google_client_id, google_client_id, require('crypto').randomBytes(16).toString('hex'), require('crypto').randomBytes(16).toString('hex'), projectIdForApp]
         );
 
         io.to(req.user.id.toString()).emit("project_created", result.rows[0]);
@@ -1158,6 +1176,7 @@ const authenticateAdmin = (req, res, next) => {
 // List all developers with project counts
 app.get('/v1/admin/users', authenticateAdmin, async (req, res) => {
     try {
+        console.log(`[ADMIN] Fetching user list...`);
         const result = await pool.query(`
             SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at,
             (SELECT COUNT(*) FROM projects WHERE user_id = u.id) as project_count
@@ -1165,8 +1184,12 @@ app.get('/v1/admin/users', authenticateAdmin, async (req, res) => {
             WHERE u.role != 'admin'
             ORDER BY u.created_at DESC
         `);
+        console.log(`[ADMIN] Found ${result.rows.length} non-admin users.`);
         res.json(result.rows);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error(`[ADMIN] User List Error: ${e.message}`);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // Toggle user status

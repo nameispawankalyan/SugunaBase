@@ -30,6 +30,7 @@ const Sidebar = () => {
   const params = useParams();
   const projectId = params?.id as string; // Get Project ID from URL
 
+  const [projectIdHuman, setProjectIdHuman] = useState('');
   const [projectName, setProjectName] = useState('Loading...');
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -47,16 +48,17 @@ const Sidebar = () => {
   // Fetch Project Name when inside a project
   useEffect(() => {
     if (projectId) {
-      const fetchProjectName = async () => {
+      const fetchProjectDetails = async () => {
         try {
           const data = await api.get(`/projects/${projectId}`);
           setProjectName(data.name);
+          setProjectIdHuman(data.project_id || projectId);
         } catch (error) {
-          console.error("Failed to fetch project name", error);
+          console.error("Failed to fetch project details", error);
           setProjectName("Unknown Project");
         }
       };
-      fetchProjectName();
+      fetchProjectDetails();
     }
   }, [projectId]);
 
@@ -98,12 +100,15 @@ const Sidebar = () => {
   return (
     <div className="flex h-screen flex-col bg-[#051e34] text-[#a2b5c8] w-[260px] flex-shrink-0 text-[14px]">
       {/* Project Header */}
-      <div className="h-[60px] flex items-center px-4 border-b border-[#1d3348] text-white hover:bg-[#1a3449] cursor-pointer transition">
+      <div className="h-[75px] flex items-center px-4 border-b border-[#1d3348] text-white hover:bg-[#1a3449] cursor-pointer transition">
         <div className="flex items-center gap-3 w-full">
-          <div className="h-6 w-6 rounded bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white">
-            P
+          <div className="h-8 w-8 rounded-lg bg-blue-500 flex items-center justify-center text-[12px] font-bold text-white shadow-lg shadow-blue-500/20">
+            {projectName[0]}
           </div>
-          <span className="font-medium truncate flex-1">{projectName}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold truncate leading-tight text-[15px]">{projectName}</p>
+            <p className="text-[10px] text-[#4fc3f7] font-black uppercase tracking-widest mt-0.5 truncate">{projectIdHuman}</p>
+          </div>
           <ChevronDown className="h-4 w-4 text-gray-400" />
         </div>
       </div>

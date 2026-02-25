@@ -31,11 +31,11 @@ app.post('/signup', async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await pool.query(
-            'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name',
+            'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, role, is_active',
             [email, hashedPassword, name]
         );
         const token = jwt.sign({ id: result.rows[0].id }, JWT_SECRET, { expiresIn: '1d' });
-        res.status(201).json({ user: { id: result.rows[0].id, email: result.rows[0].email, name: result.rows[0].name, role: result.rows[0].role }, token });
+        res.status(201).json({ user: result.rows[0], token });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

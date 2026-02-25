@@ -298,7 +298,8 @@ export default function Dashboard() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-black text-xl text-gray-900 truncate">{project.name}</h3>
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{project.platform}</p>
+                                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">{project.project_id}</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{project.platform}</p>
                                 </div>
                             </div>
 
