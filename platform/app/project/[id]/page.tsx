@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { api } from '@/utils/api';
-import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Box, Download, Settings, Smartphone, Trash2, RefreshCw, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import Link from 'next/link';
 
 // Config Object Generator
@@ -38,6 +38,64 @@ const generateConfig = (projectId: string, packageName: string, googleClientId?:
     }
 };
 
+// Premium Modal Component
+const Modal = ({ isOpen, title, message, onConfirm, onCancel, confirmText, type = 'confirm' }: any) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-300">
+            <div className="bg-[#0c1015] border border-white/10 rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="p-10 text-center">
+                    {type === 'danger' ? (
+                        <div className="h-20 w-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Trash2 className="h-10 w-10 text-red-500" />
+                        </div>
+                    ) : (
+                        <div className="h-20 w-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <AlertCircle className="h-10 w-10 text-blue-500" />
+                        </div>
+                    )}
+                    <h3 className="text-2xl font-black text-white tracking-tight mb-3">{title}</h3>
+                    <p className="text-gray-400 font-medium leading-relaxed">{message}</p>
+                </div>
+                <div className="flex border-t border-white/5">
+                    <button
+                        onClick={onCancel}
+                        className="flex-1 px-8 py-6 text-xs font-black uppercase tracking-widest text-gray-500 hover:text-white hover:bg-white/[0.02] transition-all"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        className={`flex-1 px-8 py-6 text-xs font-black uppercase tracking-widest transition-all ${type === 'danger' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-white text-black hover:bg-gray-100'}`}
+                    >
+                        {confirmText || 'Confirm'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Toast Component
+const Toast = ({ message, type, onClose }: any) => {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 4000);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    return (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-bottom-5 duration-300">
+            <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl border backdrop-blur-xl shadow-2xl ${type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                {type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+                <span className="text-sm font-black tracking-tight">{message}</span>
+                <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-all ml-2">
+                    <X className="h-4 w-4" />
+                </button>
+            </div>
+        </div>
+    );
+};
+
 export default function ProjectDetails() {
     const router = useRouter();
     const params = useParams();
@@ -51,7 +109,11 @@ export default function ProjectDetails() {
     const [newPackageName, setNewPackageName] = useState('');
     const [error, setError] = useState<string | null>(null);
 
-    // Fingerprint Modal/State
+    // Modal & Toast State
+    const [modal, setModal] = useState<any>({ isOpen: false });
+    const [toast, setToast] = useState<any>(null);
+
+    // Fingerprint State
     const [addingKeyTo, setAddingKeyTo] = useState<number | null>(null);
     const [newKeyLabel, setNewKeyLabel] = useState('Debug');
     const [newSha1, setNewSha1] = useState('');
@@ -65,7 +127,8 @@ export default function ProjectDetails() {
                 api.get(`/projects/${projectId}/apps`)
             ]);
             setProject(projData);
-            setApps(appsData);
+            setApps(Array.isArray(appsData) ? appsData : []);
+            setError(null);
         } catch (error: any) {
             console.error("Failed to fetch project details", error);
             setError(error.message);
@@ -78,8 +141,15 @@ export default function ProjectDetails() {
         if (projectId) fetchProjectAndApps();
     }, [projectId]);
 
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+    };
+
     const handleAddApp = async () => {
-        if (!newPackageName) return;
+        if (!newPackageName) {
+            showToast('Package name is required', 'error');
+            return;
+        }
         try {
             await api.post(`/projects/${projectId}/apps`, {
                 package_name: newPackageName,
@@ -88,19 +158,29 @@ export default function ProjectDetails() {
             setNewAppName('');
             setNewPackageName('');
             setIsAddingApp(false);
-            fetchProjectAndApps();
-            alert('App registered successfully!');
+            await fetchProjectAndApps();
+            showToast('App registered successfully!');
         } catch (error: any) {
-            alert('Failed to add app: ' + error.message);
+            showToast(error.message, 'error');
         }
     };
 
-    const handleDeleteApp = async (appId: number) => {
-        if (!confirm('Delete this app and all its fingerprints?')) return;
-        try {
-            await api.delete(`/projects/${projectId}/apps/${appId}`);
-            fetchProjectAndApps();
-        } catch (e: any) { alert(e.message); }
+    const handleDeleteApp = (appId: number) => {
+        setModal({
+            isOpen: true,
+            title: 'Delete Application',
+            message: 'Are you sure you want to remove this app? All associated SHA fingerprints will be lost.',
+            type: 'danger',
+            confirmText: 'Delete App',
+            onConfirm: async () => {
+                setModal({ isOpen: false });
+                try {
+                    await api.delete(`/projects/${projectId}/apps/${appId}`);
+                    await fetchProjectAndApps();
+                    showToast('Application deleted');
+                } catch (e: any) { showToast(e.message, 'error'); }
+            }
+        });
     };
 
     const handleAddFingerprint = async () => {
@@ -116,20 +196,31 @@ export default function ProjectDetails() {
             setNewSha256('');
             setNewKeyLabel('Debug');
             setAddingKeyTo(null);
-            fetchProjectAndApps();
+            await fetchProjectAndApps();
+            showToast('Signature added successfully');
         } catch (error: any) {
-            alert('Failed to save key: ' + error.message);
+            showToast('Failed to save key: ' + error.message, 'error');
         } finally {
             setSavingKey(false);
         }
     };
 
-    const handleDeleteFingerprint = async (appId: number, fId: number) => {
-        if (!confirm('Remove this fingerprint?')) return;
-        try {
-            await api.delete(`/projects/${projectId}/apps/${appId}/fingerprints/${fId}`);
-            fetchProjectAndApps();
-        } catch (e: any) { alert(e.message); }
+    const handleDeleteFingerprint = (appId: number, fId: number) => {
+        setModal({
+            isOpen: true,
+            title: 'Remove Signature',
+            message: 'Are you sure you want to remove this SHA fingerprint?',
+            type: 'danger',
+            confirmText: 'Remove',
+            onConfirm: async () => {
+                setModal({ isOpen: false });
+                try {
+                    await api.delete(`/projects/${projectId}/apps/${appId}/fingerprints/${fId}`);
+                    await fetchProjectAndApps();
+                    showToast('Signature removed');
+                } catch (e: any) { showToast(e.message, 'error'); }
+            }
+        });
     };
 
     const downloadConfig = (app: any) => {
@@ -138,32 +229,45 @@ export default function ProjectDetails() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = "suguna-services.json";
+        a.download = `${app.package_name}-suguna-services.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        showToast('Config downloaded');
     };
 
-    const handleDeleteProject = async () => {
-        if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) return;
-        try {
-            await api.delete(`/projects/${projectId}`);
-            router.push('/console');
-        } catch (error: any) {
-            alert('Failed to delete project: ' + error.message);
-        }
+    const handleDeleteProject = () => {
+        setModal({
+            isOpen: true,
+            title: 'Destroy Project',
+            message: 'This action is irreversible. All data, hosting sites, and linked apps will be permanently deleted.',
+            type: 'danger',
+            confirmText: 'Destroy Now',
+            onConfirm: async () => {
+                setModal({ isOpen: false });
+                try {
+                    await api.delete(`/projects/${projectId}`);
+                    router.push('/console');
+                } catch (error: any) {
+                    showToast('Failed to delete project: ' + error.message, 'error');
+                }
+            }
+        });
     };
 
     if (loading) {
         return <div className="p-8 text-center flex items-center justify-center h-screen bg-[#020609]">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-600"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
         </div>;
     }
 
     return (
-        <div className="space-y-8 max-w-6xl mx-auto py-10 px-6">
+        <div className="space-y-8 max-w-6xl mx-auto py-10 px-6 relative">
+            {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+            <Modal {...modal} onCancel={() => setModal({ isOpen: false })} />
+
             {error ? (
-                <div className="bg-red-50/10 border border-red-500/20 text-red-400 p-12 rounded-[40px] text-center shadow-2xl backdrop-blur-xl">
+                <div className="bg-red-50/10 border border-red-500/20 text-red-400 p-12 rounded-[40px] text-center shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in duration-500">
                     <Trash2 className="h-20 w-20 text-red-500/50 mx-auto mb-6" />
                     <h2 className="text-3xl font-black tracking-tight">Access Denied</h2>
                     <p className="mt-3 text-red-400/70 font-medium">{error}</p>
@@ -173,7 +277,7 @@ export default function ProjectDetails() {
                 </div>
             ) : !project ? (
                 <div className="flex items-center justify-center py-40">
-                    <RefreshCw className="h-10 w-10 text-orange-600 animate-spin" />
+                    <RefreshCw className="h-10 w-10 text-blue-600 animate-spin" />
                 </div>
             ) : (
                 <>
@@ -186,8 +290,8 @@ export default function ProjectDetails() {
                             <div>
                                 <h1 className="text-4xl font-black text-white tracking-tighter leading-none">{project.name}</h1>
                                 <div className="flex items-center gap-4 mt-3">
-                                    <span className="bg-orange-600/10 text-orange-500 border border-orange-600/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{project.platform}</span>
-                                    <span className="font-mono text-[10px] text-gray-500 bg-black/40 px-3 py-1 rounded-full border border-white/5 uppercase tracking-tighter shadow-inner">PROJ_ID: {project.project_id || projectId}</span>
+                                    <span className="bg-blue-600/10 text-blue-500 border border-blue-600/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{project.platform}</span>
+                                    <span className="font-mono text-[10px] text-gray-500 bg-black/40 px-3 py-1 rounded-full border border-white/5 uppercase tracking-tighter shadow-inner">ID: {project.project_id || projectId}</span>
                                 </div>
                             </div>
                         </div>
@@ -197,7 +301,7 @@ export default function ProjectDetails() {
                                 className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 text-xs font-black text-white uppercase tracking-widest transition-all"
                             >
                                 <Settings className="h-4 w-4" />
-                                Project Settings
+                                Settings
                             </button>
                             <button
                                 onClick={handleDeleteProject}
@@ -238,13 +342,16 @@ export default function ProjectDetails() {
                                 <div className="p-10 space-y-10">
                                     {isAddingApp && (
                                         <div className="bg-white/[0.02] p-8 rounded-[32px] border border-white/5 animate-in slide-in-from-top-4 duration-300">
-                                            <h3 className="text-white font-black text-sm uppercase tracking-widest mb-6">Register New App</h3>
+                                            <div className="flex justify-between items-center mb-6">
+                                                <h3 className="text-white font-black text-sm uppercase tracking-widest">Register New App</h3>
+                                                <button onClick={() => setIsAddingApp(false)} className="text-gray-500 hover:text-white transition-colors">✕</button>
+                                            </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2">App Display Name</label>
+                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2">App Name</label>
                                                     <input
                                                         type="text"
-                                                        placeholder="e.g. FriendZone Pro"
+                                                        placeholder="e.g. My Awesome App"
                                                         className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-blue-500/50 outline-none transition-all placeholder:text-gray-700 font-bold"
                                                         value={newAppName}
                                                         onChange={(e) => setNewAppName(e.target.value)}
@@ -254,7 +361,7 @@ export default function ProjectDetails() {
                                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-2">Package Name</label>
                                                     <input
                                                         type="text"
-                                                        placeholder="com.suguna.friendzone"
+                                                        placeholder="com.example.app"
                                                         className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-blue-500/50 outline-none transition-all placeholder:text-gray-700 font-bold"
                                                         value={newPackageName}
                                                         onChange={(e) => setNewPackageName(e.target.value)}
@@ -287,7 +394,7 @@ export default function ProjectDetails() {
                                     ) : (
                                         <div className="space-y-6">
                                             {apps.map((app) => (
-                                                <div key={app.id} className="bg-white/[0.02] border border-white/5 rounded-[32px] overflow-hidden group">
+                                                <div key={app.id} className="bg-white/[0.02] border border-white/5 rounded-[32px] overflow-hidden group hover:border-white/10 transition-all">
                                                     <div className="p-8 flex items-center justify-between border-b border-white/[0.02] bg-white/[0.01]">
                                                         <div className="flex items-center gap-5">
                                                             <div className="h-14 w-14 bg-blue-600/10 border border-blue-600/20 rounded-2xl flex items-center justify-center text-blue-500 shadow-lg shadow-blue-500/5 transition-transform group-hover:scale-110">
@@ -308,17 +415,18 @@ export default function ProjectDetails() {
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteApp(app.id)}
-                                                                className="p-3 bg-rose-500/5 text-rose-500/40 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
+                                                                className="p-3 bg-red-500/5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                                                                title="Delete App"
                                                             >
                                                                 <Trash2 className="h-5 w-5" />
                                                             </button>
                                                         </div>
                                                     </div>
 
-                                                    <div className="p-8">
+                                                    <div className="p-8 bg-black/20">
                                                         <div className="space-y-4">
                                                             <div className="flex justify-between items-center mb-4">
-                                                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Certificate Fingerprints ({app.fingerprints?.length || 0})</span>
+                                                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">SHA Fingerprints ({app.fingerprints?.length || 0})</span>
                                                                 <button
                                                                     onClick={() => setAddingKeyTo(app.id)}
                                                                     className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:underline"
@@ -346,7 +454,7 @@ export default function ProjectDetails() {
                                                                     </div>
                                                                     <button
                                                                         onClick={() => handleDeleteFingerprint(app.id, f.id)}
-                                                                        className="p-2.5 text-gray-600 hover:text-rose-500 transition-colors opacity-0 group-hover/key:opacity-100"
+                                                                        className="p-2.5 text-gray-600 hover:text-red-500 transition-colors opacity-0 group-hover/key:opacity-100"
                                                                     >
                                                                         <Trash2 className="h-4 w-4" />
                                                                     </button>
@@ -372,7 +480,7 @@ export default function ProjectDetails() {
                                                                                 />
                                                                             </div>
                                                                             <div className="space-y-2">
-                                                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-1 Fingerprint</label>
+                                                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">SHA-1</label>
                                                                                 <input
                                                                                     type="text"
                                                                                     placeholder="XX:XX:XX:..."
@@ -392,13 +500,21 @@ export default function ProjectDetails() {
                                                                                 onChange={(e) => setNewSha256(e.target.value)}
                                                                             />
                                                                         </div>
-                                                                        <button
-                                                                            onClick={handleAddFingerprint}
-                                                                            disabled={savingKey}
-                                                                            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all"
-                                                                        >
-                                                                            {savingKey ? 'Verifying...' : 'Authenticate & Save Key'}
-                                                                        </button>
+                                                                        <div className="flex gap-4">
+                                                                            <button
+                                                                                onClick={handleAddFingerprint}
+                                                                                disabled={savingKey}
+                                                                                className="flex-1 py-4 bg-white text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all disabled:opacity-50"
+                                                                            >
+                                                                                {savingKey ? 'Saving...' : 'Save Signature'}
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => setAddingKeyTo(null)}
+                                                                                className="px-8 py-4 bg-white/5 text-gray-500 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:text-white transition-all"
+                                                                            >
+                                                                                Cancel
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -413,70 +529,67 @@ export default function ProjectDetails() {
 
                             {/* Service Quick Links */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-[#12161c] rounded-[40px] border border-white/5 p-8 flex items-center justify-between group cursor-pointer hover:bg-[#161b22] transition-all">
+                                <Link href={`/project/${projectId}/firestore`} className="bg-[#12161c] rounded-[40px] border border-white/5 p-8 flex items-center justify-between group hover:bg-[#161b22] transition-all">
                                     <div className="flex items-center gap-5">
                                         <div className="h-14 w-14 bg-purple-600/10 border border-purple-600/20 rounded-2xl flex items-center justify-center text-purple-500 shadow-xl shadow-purple-500/5">
                                             <Box className="h-7 w-7" />
                                         </div>
                                         <div>
                                             <h2 className="font-black text-white tracking-tight">Suguna Firestore</h2>
-                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter mt-1">Real-time Document Store</p>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter mt-1">Real-time DB</p>
                                         </div>
                                     </div>
                                     <ArrowLeft className="h-5 w-5 text-gray-700 rotate-180 group-hover:translate-x-1 transition-transform" />
-                                </div>
-                                <div
-                                    onClick={() => router.push(`/project/${projectId}/cast`)}
-                                    className="bg-[#12161c] rounded-[40px] border border-white/5 p-8 flex items-center justify-between group cursor-pointer hover:bg-[#161b22] transition-all"
-                                >
+                                </Link>
+                                <Link href={`/project/${projectId}/cast`} className="bg-[#12161c] rounded-[40px] border border-white/5 p-8 flex items-center justify-between group hover:bg-[#161b22] transition-all">
                                     <div className="flex items-center gap-5">
                                         <div className="h-14 w-14 bg-emerald-600/10 border border-emerald-600/20 rounded-2xl flex items-center justify-center text-emerald-500 shadow-xl shadow-emerald-500/5">
                                             <RefreshCw className="h-7 w-7" />
                                         </div>
                                         <div>
                                             <h2 className="font-black text-white tracking-tight">Suguna Cast</h2>
-                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter mt-1">Media & Analytics</p>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-tighter mt-1">Video & Audio</p>
                                         </div>
                                     </div>
                                     <ArrowLeft className="h-5 w-5 text-gray-700 rotate-180 group-hover:translate-x-1 transition-transform" />
-                                </div>
+                                </Link>
                             </div>
                         </div>
 
                         {/* Modern Sidebar */}
                         <div className="space-y-8">
                             <div className="bg-[#0c1015] rounded-[48px] border border-white/5 shadow-2xl p-10">
-                                <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.3em] mb-8">Performance</h3>
+                                <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.3em] mb-8">System Health</h3>
                                 <div className="space-y-8">
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
-                                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Active Developers</span>
-                                            <span className="text-sm font-bold text-white">Live Monitoring</span>
+                                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Active Connections</span>
+                                            <span className="text-sm font-bold text-white">Live</span>
                                         </div>
                                         <span className="text-4xl font-black text-white tracking-tighter">{project.usersCount || 0}</span>
                                     </div>
                                     <div className="h-px bg-white/[0.03]"></div>
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
-                                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">API Requests</span>
-                                            <span className="text-sm font-bold text-white">Last 24 Hours</span>
+                                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">API Status</span>
+                                            <span className="text-sm font-bold text-white">Gateway</span>
                                         </div>
                                         <span className="text-2xl font-black text-emerald-500 tracking-tighter">Healthy</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-gradient-to-br from-[#1a3449] to-[#0f1f2d] rounded-[48px] p-10 text-white shadow-2xl relative overflow-hidden group">
+                            <div className="bg-gradient-to-br from-[#12161c] to-[#0c1015] rounded-[48px] p-10 text-white shadow-2xl border border-white/5 relative overflow-hidden group">
                                 <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform duration-700">
-                                    <Box className="h-60 w-60" />
+                                    <Smartphone className="h-60 w-60" />
                                 </div>
                                 <div className="relative z-10">
-                                    <h3 className="text-2xl font-black tracking-tight mb-4">Architectural Ready</h3>
-                                    <p className="text-sm text-gray-300 font-medium mb-10 leading-relaxed">
-                                        Your multi-app configuration is now live. Each app validated by unique SHA signatures.
+                                    <h3 className="text-2xl font-black tracking-tight mb-4">Multi-App Ready</h3>
+                                    <p className="text-sm text-gray-400 font-medium mb-10 leading-relaxed">
+                                        Each linked application provides unique security credentials via SHA signatures. Download your config files below.
                                     </p>
-                                    <a href="/docs/android" className="block w-full text-center bg-white text-black rounded-[24px] py-4 text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-black/20">
-                                        SDK Implementation
+                                    <a href="/docs" className="block w-full text-center bg-white text-black rounded-[24px] py-4 text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-black/20">
+                                        View Documentation
                                     </a>
                                 </div>
                             </div>

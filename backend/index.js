@@ -225,6 +225,27 @@ const initDB = async () => {
             await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;`);
             // Firestore migration
             await pool.query(`ALTER TABLE firestore_data ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+
+            // PORT EXISTING APP DATA (MIGRATION)
+            try {
+                await pool.query(`
+                    INSERT INTO project_apps (project_id, package_name, app_name, platform)
+                    SELECT id, package_name, name, platform FROM projects 
+                    WHERE package_name IS NOT NULL AND package_name != ''
+                    ON CONFLICT (project_id, package_name) DO NOTHING;
+                `);
+
+                // Also port fingerprints if they exist
+                await pool.query(`
+                    INSERT INTO app_fingerprints (app_id, sha1, sha256, label)
+                    SELECT pa.id, p.sha1_fingerprint, p.sha256_fingerprint, 'Legacy'
+                    FROM projects p
+                    JOIN project_apps pa ON pa.project_id = p.id AND pa.package_name = p.package_name
+                    WHERE (p.sha1_fingerprint IS NOT NULL OR p.sha256_fingerprint IS NOT NULL)
+                    ON CONFLICT DO NOTHING;
+                `);
+            } catch (portError) { console.log("Data Porting Note:", portError.message); }
+
         } catch (e) { console.log("Migration Note:", e.message); }
         // New Table for End Users (App Users)
         await pool.query(`
@@ -1039,11 +1060,12 @@ app.get('/v1/projects/:id/config', authenticateToken, resolveProject, async (req
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/v1/projects/:id', authenticateToken, async (req, res) => {
+app.delete('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
     try {
+        // Use resolved numeric ID from req.project.id
         const result = await pool.query(
             'DELETE FROM projects WHERE id = $1 AND user_id = $2',
-            [req.params.id, req.user.id]
+            [req.project.id, req.user.id]
         );
         if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
 
