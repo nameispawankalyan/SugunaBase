@@ -8,17 +8,20 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
     const { id } = use(params);
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState(''); // Search State
 
     const fetchUsers = async () => {
         setLoading(true);
+        setError(null);
         try {
             const data = await api.get(`/projects/${id}/users`);
             if (data.users) {
                 setUsers(data.users);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to fetch users", error);
+            setError(error.message);
         } finally {
             setLoading(false);
         }
@@ -77,136 +80,151 @@ export default function AuthPage({ params }: { params: Promise<{ id: string }> }
                 </div>
             </div>
 
-            {/* Action Bar */}
-            <div className="flex justify-between items-center bg-white p-4 rounded-t-lg border border-gray-200 border-b-0 shadow-sm mt-6">
-                <div className="relative w-96 group">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-                    <input
-                        type="text"
-                        placeholder="Search by email, phone, or UID"
-                        className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-                <div className="flex gap-3">
-                    <button onClick={fetchUsers} className="p-2 text-gray-600 hover:bg-gray-50 hover:text-blue-600 rounded-md border border-gray-300 transition-all" title="Refresh Users">
-                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-colors">
-                        <Plus className="h-4 w-4" />
-                        Add user
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg text-center shadow-sm">
+                    <Shield className="h-12 w-12 text-red-500 mx-auto mb-3" />
+                    <h2 className="text-lg font-bold">Access Denied</h2>
+                    <p className="mt-1">{error}</p>
+                    <button onClick={() => window.location.href = '/console'} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700">
+                        Go back to Console
                     </button>
                 </div>
-            </div>
+            )}
 
-            {/* Users Table */}
-            <div className="border border-gray-200 bg-white rounded-b-lg shadow-sm overflow-hidden min-h-[400px]">
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-                        <span className="text-sm">Loading users...</span>
+            {!error && (
+                <>
+                    {/* Action Bar */}
+                    <div className="flex justify-between items-center bg-white p-4 rounded-t-lg border border-gray-200 border-b-0 shadow-sm mt-6">
+                        <div className="relative w-96 group">
+                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                            <input
+                                type="text"
+                                placeholder="Search by email, phone, or UID"
+                                className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={fetchUsers} className="p-2 text-gray-600 hover:bg-gray-50 hover:text-blue-600 rounded-md border border-gray-300 transition-all" title="Refresh Users">
+                                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-colors">
+                                <Plus className="h-4 w-4" />
+                                Add user
+                            </button>
+                        </div>
                     </div>
-                ) : filteredUsers.length > 0 ? (
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/3">Identifier</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Providers</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Signed In</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/4">User UID</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredUsers.map((user) => (
-                                <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                            {user.profile_pic ? (
-                                                <img src={user.profile_pic} alt="" className="h-8 w-8 rounded-full border border-gray-200" />
-                                            ) : (
-                                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs border border-blue-200">
-                                                    {user.email ? user.email[0].toUpperCase() : <User className="h-4 w-4" />}
-                                                </div>
-                                            )}
-                                            <div className="ml-4 max-w-[200px]">
-                                                <div className="text-sm font-medium text-gray-900 truncate" title={user.name || "Unknown"}>
-                                                    {user.name || "Unknown User"}
-                                                </div>
-                                                <div className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-500 hover:text-blue-600 transition-colors" onClick={() => handleCopy(user.email, `email-${user.id}`)}>
-                                                    <span className="truncate max-w-[180px]" title={user.email}>{user.email}</span>
-                                                    {copiedId === `email-${user.id}` ? (
-                                                        <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">Copied!</span>
+
+                    {/* Users Table */}
+                    <div className="border border-gray-200 bg-white rounded-b-lg shadow-sm overflow-hidden min-h-[400px]">
+                        {loading ? (
+                            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                                <span className="text-sm">Loading users...</span>
+                            </div>
+                        ) : filteredUsers.length > 0 ? (
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/3">Identifier</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Providers</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Signed In</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/4">User UID</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {filteredUsers.map((user) => (
+                                        <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center">
+                                                    {user.profile_pic ? (
+                                                        <img src={user.profile_pic} alt="" className="h-8 w-8 rounded-full border border-gray-200" />
                                                     ) : (
-                                                        <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs border border-blue-200">
+                                                            {user.email ? user.email[0].toUpperCase() : <User className="h-4 w-4" />}
+                                                        </div>
+                                                    )}
+                                                    <div className="ml-4 max-w-[200px]">
+                                                        <div className="text-sm font-medium text-gray-900 truncate" title={user.name || "Unknown"}>
+                                                            {user.name || "Unknown User"}
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-500 hover:text-blue-600 transition-colors" onClick={() => handleCopy(user.email, `email-${user.id}`)}>
+                                                            <span className="truncate max-w-[180px]" title={user.email}>{user.email}</span>
+                                                            {copiedId === `email-${user.id}` ? (
+                                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">Copied!</span>
+                                                            ) : (
+                                                                <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-2">
+                                                    {user.provider === 'google' ? (
+                                                        <div className="flex items-center gap-1.5 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm text-xs font-medium text-gray-700">
+                                                            <img src="https://www.google.com/favicon.ico" className="h-3 w-3" alt="Google" />
+                                                            Google
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1.5 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm text-xs font-medium text-gray-700">
+                                                            <Mail className="h-3 w-3 text-gray-500" />
+                                                            Email
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {formatDate(user.created_at)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {formatDate(user.last_login)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div
+                                                    className="group/uid flex items-center justify-between text-xs font-mono text-gray-500 bg-gray-50 px-2 py-1.5 rounded border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all max-w-[200px]"
+                                                    onClick={() => handleCopy(user.id, `uid-${user.id}`)}
+                                                    title="Click to copy UID"
+                                                >
+                                                    <span className="truncate">{user.id}</span>
+                                                    {copiedId === `uid-${user.id}` ? (
+                                                        <span className="ml-2 text-green-600 font-bold">✓</span>
+                                                    ) : (
+                                                        <svg className="h-3 w-3 ml-2 text-gray-400 group-hover/uid:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 01-2-2V6a2 2 0 012-2h8" />
                                                         </svg>
                                                     )}
                                                 </div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center gap-2">
-                                            {user.provider === 'google' ? (
-                                                <div className="flex items-center gap-1.5 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm text-xs font-medium text-gray-700">
-                                                    <img src="https://www.google.com/favicon.ico" className="h-3 w-3" alt="Google" />
-                                                    Google
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-1.5 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm text-xs font-medium text-gray-700">
-                                                    <Mail className="h-3 w-3 text-gray-500" />
-                                                    Email
-                                                </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {formatDate(user.created_at)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {formatDate(user.last_login)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div
-                                            className="group/uid flex items-center justify-between text-xs font-mono text-gray-500 bg-gray-50 px-2 py-1.5 rounded border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all max-w-[200px]"
-                                            onClick={() => handleCopy(user.id, `uid-${user.id}`)}
-                                            title="Click to copy UID"
-                                        >
-                                            <span className="truncate">{user.id}</span>
-                                            {copiedId === `uid-${user.id}` ? (
-                                                <span className="ml-2 text-green-600 font-bold">✓</span>
-                                            ) : (
-                                                <svg className="h-3 w-3 ml-2 text-gray-400 group-hover/uid:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 01-2-2V6a2 2 0 012-2h8" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-                        <div className="bg-gray-50 p-6 rounded-full mb-4">
-                            <UsersIconPlaceholder />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                            {users.length === 0 ? "No users yet" : "No matching users found"}
-                        </h3>
-                        <p className="text-gray-500 max-w-sm mt-2 mb-8 text-sm">
-                            {users.length === 0 ? "Users will appear here once they sign up in your app." : "Try adjusting your search query."}
-                        </p>
-                        {users.length === 0 && (
-                            <button className="text-blue-600 font-medium hover:text-blue-700 hover:underline flex items-center gap-1 text-sm">
-                                Learn how to add users <span aria-hidden="true">&rarr;</span>
-                            </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+                                <div className="bg-gray-50 p-6 rounded-full mb-4">
+                                    <UsersIconPlaceholder />
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    {users.length === 0 ? "No users yet" : "No matching users found"}
+                                </h3>
+                                <p className="text-gray-500 max-w-sm mt-2 mb-8 text-sm">
+                                    {users.length === 0 ? "Users will appear here once they sign up in your app." : "Try adjusting your search query."}
+                                </p>
+                                {users.length === 0 && (
+                                    <button className="text-blue-600 font-medium hover:text-blue-700 hover:underline flex items-center gap-1 text-sm">
+                                        Learn how to add users <span aria-hidden="true">&rarr;</span>
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
-                )}
-            </div>
+                </>
+            )}
         </div>
     );
 }

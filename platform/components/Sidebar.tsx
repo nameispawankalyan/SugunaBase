@@ -74,8 +74,12 @@ const Sidebar = () => {
           const data = await api.get(`/projects/${projectId}`);
           setProjectName(data.name);
           setProjectIdHuman(data.project_id || projectId);
-        } catch (error) {
+        } catch (error: any) {
           console.error("Failed to fetch project details", error);
+          if (error.message.toLowerCase().includes('denied') || error.message.toLowerCase().includes('403')) {
+            alert("Access Denied: You do not have permission to view this project.");
+            router.push('/console');
+          }
           setProjectName("Unknown Project");
         }
       };
