@@ -96,6 +96,23 @@ const authenticateAppToken = (req, res, next) => {
     });
 };
 
+// Middleware to check if a project is active
+const verifyProjectActive = async (req, res, next) => {
+    const projectId = req.params.projectId || req.params.id || req.headers['x-project-id'];
+    if (!projectId) return next();
+
+    try {
+        const result = await pool.query('SELECT is_active FROM projects WHERE id = $1', [projectId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+        if (!result.rows[0].is_active) {
+            return res.status(403).json({ error: "This project has been deactivated by the administrator." });
+        }
+        next();
+    } catch (e) {
+        next();
+    }
+};
+
 const initDB = async () => {
     try {
         await pool.query(`
@@ -439,22 +456,6 @@ app.post('/v1/cast/get-token', async (req, res) => {
 });
 
 
-// Middleware to check if a project is active
-const verifyProjectActive = async (req, res, next) => {
-    const projectId = req.params.projectId || req.params.id || req.headers['x-project-id'];
-    if (!projectId) return next();
-
-    try {
-        const result = await pool.query('SELECT is_active FROM projects WHERE id = $1', [projectId]);
-        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
-        if (!result.rows[0].is_active) {
-            return res.status(403).json({ error: "This project has been deactivated by the administrator." });
-        }
-        next();
-    } catch (e) {
-        next();
-    }
-};
 
 // ====================================================
 // FIRESTORE PROXY (suguna-firestore: 3400)
