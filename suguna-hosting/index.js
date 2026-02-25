@@ -142,6 +142,6 @@ app.delete('/sites/:projectId/:siteId', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, '127.0.0.1', () => {
     console.log(`🕸️ Suguna Hosting Microservice running on port ${port}`);
 });

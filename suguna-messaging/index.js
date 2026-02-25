@@ -148,6 +148,6 @@ app.post('/config/reset/:projectId', (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, '127.0.0.1', () => {
     console.log(`🚀 Suguna Messaging Microservice running on port ${port}`);
 });

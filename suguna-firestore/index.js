@@ -158,6 +158,6 @@ app.delete('/data/*', async (req, res) => {
     }
 });
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, '127.0.0.1', () => {
     console.log(`🔥 Suguna Firestore Microservice running on port ${port}`);
 });

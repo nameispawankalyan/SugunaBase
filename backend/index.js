@@ -97,6 +97,7 @@ const authenticateAppToken = (req, res, next) => {
 
 // Middleware to check if a project is active
 // Middleware to resolve Project ID (Slug -> Numeric) and check if active
+// Middleware to resolve Project ID (Slug -> Numeric) and check if active + Ownership Security
 const resolveProject = async (req, res, next) => {
     let projectIdRaw = req.params.projectId || req.params.id || req.headers['x-project-id'];
     if (!projectIdRaw) return next();
@@ -104,8 +105,8 @@ const resolveProject = async (req, res, next) => {
     try {
         const isNumeric = /^\d+$/.test(projectIdRaw);
         const query = isNumeric
-            ? 'SELECT id, is_active FROM projects WHERE id = $1'
-            : 'SELECT id, is_active FROM projects WHERE project_id = $1';
+            ? 'SELECT * FROM projects WHERE id = $1'
+            : 'SELECT * FROM projects WHERE project_id = $1';
 
         const result = await pool.query(query, [projectIdRaw]);
 
@@ -113,11 +114,23 @@ const resolveProject = async (req, res, next) => {
             return res.status(404).json({ error: "Project not found" });
         }
 
-        if (!result.rows[0].is_active) {
+        const project = result.rows[0];
+
+        // 1. Check if project is active
+        if (!project.is_active) {
             return res.status(403).json({ error: "This project has been deactivated by the administrator." });
         }
 
-        const actualId = result.rows[0].id.toString();
+        // 2. SECURITY: Verify Ownership for Console Users
+        // If req.user is present (from authenticateToken), they MUST be the owner OR an admin
+        if (req.user) {
+            if (project.user_id !== req.user.id && req.user.role !== 'admin') {
+                console.warn(`🚨 [SECURITY] Unauthorized Project Access Attempt by ${req.user.email} on Project ${project.name}`);
+                return res.status(403).json({ error: "Access Denied: You do not have permission to view this project." });
+            }
+        }
+
+        const actualId = project.id.toString();
 
         // Inject resolved numeric ID back into params/headers
         if (req.params.projectId) req.params.projectId = actualId;
@@ -125,7 +138,7 @@ const resolveProject = async (req, res, next) => {
         if (req.headers['x-project-id']) req.headers['x-project-id'] = actualId;
 
         // Attach project data to request object for convenience
-        req.project = result.rows[0];
+        req.project = project;
 
         next();
     } catch (e) {
@@ -800,15 +813,8 @@ app.post('/v1/projects', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
-    try {
-        const result = await pool.query(
-            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
-            [req.params.id, req.user.id, req.user.role]
-        );
-        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
-        res.json(result.rows[0]);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+app.get('/v1/projects/:id', authenticateToken, resolveProject, (req, res) => {
+    res.json(req.project);
 });
 
 // GET USERS FOR A PROJECT (Console View)
@@ -825,42 +831,38 @@ app.get('/v1/projects/:id/users', authenticateToken, resolveProject, async (req,
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Update Project (Add App)
-app.post('/v1/projects/:id/apps', authenticateToken, async (req, res) => {
+app.post('/v1/projects/:id/apps', authenticateToken, resolveProject, async (req, res) => {
     const { package_name } = req.body;
     try {
         const result = await pool.query(
-            'UPDATE projects SET package_name = $1 WHERE id = $2 AND (user_id = $3 OR $4 = \'admin\') RETURNING *',
-            [package_name, req.params.id, req.user.id, req.user.role]
+            'UPDATE projects SET package_name = $1 WHERE id = $2 RETURNING *',
+            [package_name, req.project.id]
         );
-        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         io.to(req.user.id.toString()).emit("project_updated", result.rows[0]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Update Project SHA Keys
-app.put('/v1/projects/:id/sha', authenticateToken, async (req, res) => {
+app.put('/v1/projects/:id/sha', authenticateToken, resolveProject, async (req, res) => {
     const { sha1, sha256 } = req.body;
     try {
         const result = await pool.query(
-            'UPDATE projects SET sha1_fingerprint = $1, sha256_fingerprint = $2 WHERE id = $3 AND (user_id = $4 OR $5 = \'admin\') RETURNING *',
-            [sha1, sha256, req.params.id, req.user.id, req.user.role]
+            'UPDATE projects SET sha1_fingerprint = $1, sha256_fingerprint = $2 WHERE id = $3 RETURNING *',
+            [sha1, sha256, req.project.id]
         );
-        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Update Project Name and Google Client ID
-app.put('/v1/projects/:id', authenticateToken, async (req, res) => {
+app.put('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
     const { name, google_client_id } = req.body;
     try {
         const result = await pool.query(
-            'UPDATE projects SET name = $1, google_client_id = $2 WHERE id = $3 AND (user_id = $4 OR $5 = \'admin\') RETURNING *',
-            [name, google_client_id, req.params.id, req.user.id, req.user.role]
+            'UPDATE projects SET name = $1, google_client_id = $2 WHERE id = $3 RETURNING *',
+            [name, google_client_id, req.project.id]
         );
-        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -868,11 +870,7 @@ app.put('/v1/projects/:id', authenticateToken, async (req, res) => {
 // Delete Project
 app.delete('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
     try {
-        const result = await pool.query(
-            'DELETE FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\') RETURNING *',
-            [req.params.id, req.user.id, req.user.role]
-        );
-        if (result.rowCount === 0) return res.status(404).json({ error: "Project not found" });
+        await pool.query('DELETE FROM projects WHERE id = $1', [req.project.id]);
         res.json({ success: true, message: "Project deleted successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -880,14 +878,7 @@ app.delete('/v1/projects/:id', authenticateToken, resolveProject, async (req, re
 // Download Config JSON (Suguna Services) - Endpoint to generate the file
 app.get('/v1/projects/:id/config', authenticateToken, resolveProject, async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT * FROM projects WHERE id = $1 AND (user_id = $2 OR $3 = \'admin\')',
-            [req.params.id, req.user.id, req.user.role]
-        );
-
-        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
-
-        const project = result.rows[0];
+        const project = req.project;
 
         // Construct the JSON structure similar to google-services.json but for SugunaBase
         const config = {

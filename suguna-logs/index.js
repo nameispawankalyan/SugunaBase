@@ -75,6 +75,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(port, '0.0.0.0', () => {
+server.listen(port, '127.0.0.1', () => {
     console.log(`📜 Suguna Logs Service running on port ${port}`);
 });
