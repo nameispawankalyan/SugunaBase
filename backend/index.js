@@ -871,18 +871,32 @@ app.get('/v1/projects', authenticateToken, async (req, res) => { /* ... */
 
 // Create Project
 app.post('/v1/projects', authenticateToken, async (req, res) => {
-    const { name, platform, google_client_id } = req.body;
+    const { name, secondary_project_id, google_client_id } = req.body;
+    let customProjectId = req.body.project_id;
+
     try {
         const userId = req.user.id;
 
-        // Generate Firebase-like project ID
-        const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-        const projectIdForApp = `${slug}-${randomSuffix}`;
+        // 1. Generate or Validate Project ID
+        if (!customProjectId) {
+            const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+            customProjectId = `${slug}-${randomSuffix}`;
+        } else {
+            // Validate format: Alphanumeric and hyphens only
+            if (!/^[a-z0-9-]+$/.test(customProjectId)) {
+                return res.status(400).json({ error: "Project ID can only contain lowercase letters, numbers, and hyphens." });
+            }
+            // Check uniqueness
+            const existing = await pool.query('SELECT id FROM projects WHERE project_id = $1', [customProjectId]);
+            if (existing.rows.length > 0) {
+                return res.status(400).json({ error: "This Project ID is already taken. Please choose another one." });
+            }
+        }
 
         const result = await pool.query(
             'INSERT INTO projects (name, platform, user_id, google_sign_in_enabled, google_client_id, app_id, api_secret, project_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-            [name, platform || 'Android', userId, !!google_client_id, google_client_id, require('crypto').randomBytes(16).toString('hex'), require('crypto').randomBytes(16).toString('hex'), projectIdForApp]
+            [name, 'Android', userId, !!google_client_id, google_client_id, require('crypto').randomBytes(16).toString('hex'), require('crypto').randomBytes(16).toString('hex'), customProjectId]
         );
 
         io.to(req.user.id.toString()).emit("project_created", result.rows[0]);

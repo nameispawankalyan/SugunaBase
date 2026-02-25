@@ -262,7 +262,7 @@ export default function ProjectDetails() {
     }
 
     return (
-        <div className="space-y-8 max-w-6xl mx-auto py-10 px-6 relative">
+        <div className="min-h-screen bg-[#020609] space-y-8 max-w-6xl mx-auto py-10 px-6 relative">
             {toast && <Toast {...toast} onClose={() => setToast(null)} />}
             <Modal {...modal} onCancel={() => setModal({ isOpen: false })} />
 
@@ -282,7 +282,7 @@ export default function ProjectDetails() {
             ) : (
                 <>
                     {/* Modern Header */}
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white/5 p-10 rounded-[40px] border border-white/5 backdrop-blur-md">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-[#0c1015] p-10 rounded-[40px] border border-white/5 shadow-2xl backdrop-blur-md transition-all">
                         <div className="flex items-center gap-6">
                             <Link href="/console" className="p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl transition-all text-gray-400">
                                 <ArrowLeft className="h-6 w-6" />
@@ -291,7 +291,7 @@ export default function ProjectDetails() {
                                 <h1 className="text-4xl font-black text-white tracking-tighter leading-none">{project.name}</h1>
                                 <div className="flex items-center gap-4 mt-3">
                                     <span className="bg-blue-600/10 text-blue-500 border border-blue-600/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{project.platform}</span>
-                                    <span className="font-mono text-[10px] text-gray-500 bg-black/40 px-3 py-1 rounded-full border border-white/5 uppercase tracking-tighter shadow-inner">ID: {project.project_id || projectId}</span>
+                                    <span className="font-mono text-[10px] text-gray-400 bg-white/5 px-3 py-1 rounded-full border border-white/5 uppercase tracking-tighter shadow-inner">ID: {project.project_id || projectId}</span>
                                 </div>
                             </div>
                         </div>

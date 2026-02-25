@@ -20,7 +20,8 @@ export default function Dashboard() {
     const [projects, setProjects] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
-    const [platform, setPlatform] = useState('Android');
+    const [customProjectId, setCustomProjectId] = useState('');
+    const [idError, setIdError] = useState('');
 
     // Admin State
     const [developers, setDevelopers] = useState<any[]>([]);
@@ -369,30 +370,57 @@ export default function Dashboard() {
                                     placeholder="e.g., FriendZone"
                                     className="w-full bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-orange-500 p-4 font-medium"
                                     value={newProjectName}
-                                    onChange={(e) => setNewProjectName(e.target.value)}
+                                    onChange={(e) => {
+                                        setNewProjectName(e.target.value);
+                                        // Auto-generate ID if not manually edited or if empty
+                                        const slug = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                                        setCustomProjectId(slug);
+                                    }}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-gray-400 uppercase mb-2 ml-1">Choose Platform</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {['Android', 'iOS', 'Web'].map(p => (
-                                        <button
-                                            key={p}
-                                            onClick={() => setPlatform(p)}
-                                            className={`py-3 rounded-2xl font-bold text-sm transition-all border-2 ${platform === p ? 'border-orange-600 bg-orange-50 text-orange-600' : 'border-gray-100 text-gray-400'}`}
-                                        >
-                                            {p}
-                                        </button>
-                                    ))}
+                                <div className="flex justify-between items-center mb-2 ml-1">
+                                    <label className="text-xs font-black text-gray-400 uppercase">Project ID</label>
+                                    <span className={`text-[10px] font-bold ${idError ? 'text-red-500' : 'text-gray-400'}`}>
+                                        {idError || 'Unique identifier'}
+                                    </span>
                                 </div>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="project-id-123"
+                                        className={`w-full bg-gray-50 border-2 rounded-2xl p-4 font-mono text-sm outline-none transition-all ${idError ? 'border-red-500 bg-red-50/10' : 'border-transparent focus:border-orange-500 bg-gray-50'}`}
+                                        value={customProjectId}
+                                        onChange={(e) => {
+                                            const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                                            setCustomProjectId(val);
+                                            if (val.length < 4) setIdError('Too short (min 4 chars)');
+                                            else setIdError('');
+                                        }}
+                                    />
+                                    <p className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-300 uppercase tracking-widest">Editable</p>
+                                </div>
+                                <p className="mt-2 text-[10px] text-gray-400 font-medium px-1">
+                                    Project ID is a permanent, unique identifier used in SugunaBase APIs.
+                                </p>
                             </div>
                         </div>
                         <div className="flex gap-4 mt-10">
                             <button onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold transition-all">Cancel</button>
                             <button onClick={async () => {
-                                await api.post('/projects', { name: newProjectName, platform: platform });
-                                setIsModalOpen(false);
-                                fetchData();
+                                if (!newProjectName) return;
+                                try {
+                                    const res = await api.post('/projects', {
+                                        name: newProjectName,
+                                        project_id: customProjectId
+                                    });
+                                    setIsModalOpen(false);
+                                    setNewProjectName('');
+                                    setCustomProjectId('');
+                                    fetchData();
+                                } catch (e: any) {
+                                    setIdError(e.message);
+                                }
                             }} className="flex-1 py-4 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold shadow-xl shadow-orange-100 transition-all">Create</button>
                         </div>
                     </div>
