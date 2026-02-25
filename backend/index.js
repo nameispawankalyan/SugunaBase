@@ -123,6 +123,7 @@ const initDB = async () => {
                 password_hash TEXT NOT NULL,
                 role VARCHAR(20) DEFAULT 'developer',
                 is_active BOOLEAN DEFAULT TRUE,
+                developer_id VARCHAR(100) UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
