@@ -15,7 +15,12 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'suguna_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET || 'suguna_secret_key'; // Match Gateway
+
+app.use((req, res, next) => {
+    console.log(`[AUTH] ${req.method} ${req.url} - ${new Date().toISOString()}`);
+    next();
+});
 
 app.get('/health', (req, res) => res.json({ status: 'UP', service: 'Suguna Auth' }));
 
@@ -36,17 +41,28 @@ app.post('/signup', async (req, res) => {
 
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
+    console.log(`[AUTH] Login Attempt for: ${email}`);
     try {
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+        if (result.rows.length === 0) {
+            console.warn(`[AUTH] User not found: ${email}`);
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
 
         const user = result.rows[0];
         const match = await bcrypt.compare(password, user.password_hash);
-        if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+        if (!match) {
+            console.warn(`[AUTH] Password mismatch for: ${email}`);
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
 
+        console.log(`[AUTH] Login Success: ${email}`);
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
         res.json({ user: { id: user.id, email: user.email, name: user.name }, token });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error(`[AUTH] Login Crash: ${e.message}`);
+        res.status(500).json({ error: 'Internal Auth Error: ' + e.message });
+    }
 });
 
 app.post('/forgot-password', async (req, res) => {

@@ -354,7 +354,10 @@ app.post('/v1/auth/signup', (req, res) => {
 app.post('/v1/auth/login', (req, res) => {
     axios.post('http://localhost:3300/login', req.body)
         .then(r => res.json(r.data))
-        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+        .catch(e => {
+            console.error(`[GATEWAY] Login Proxy Error: ${e.response?.status || 'No Response'} - ${JSON.stringify(e.response?.data || e.message)}`);
+            res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
+        });
 });
 
 app.post('/v1/auth/forgot-password', (req, res) => {
