@@ -57,17 +57,26 @@ export default function GlobalHealthPage() {
                     return;
                 }
                 setAuthorized(true);
-                checkHealth();
             } catch (e) {
+                console.error("Auth check failed:", e);
                 window.location.href = '/login';
             }
         };
         checkAuth();
-        const interval = setInterval(checkHealth, 30000); // Auto refresh every 30s
-        return () => clearInterval(interval);
     }, []);
 
-    if (!authorized) return null;
+    useEffect(() => {
+        if (!authorized) return;
+        checkHealth();
+        const interval = setInterval(checkHealth, 30000); // Auto refresh every 30s
+        return () => clearInterval(interval);
+    }, [authorized]);
+
+    if (!authorized) return (
+        <div className="h-screen flex items-center justify-center bg-gray-50">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+        </div>
+    );
 
     return (
         <div className="p-8 max-w-7xl mx-auto">
@@ -129,7 +138,7 @@ export default function GlobalHealthPage() {
                                         <service.icon className="h-6 w-6" />
                                     </div>
                                     <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isUp ? 'bg-emerald-50 text-emerald-600' :
-                                            isDown ? 'bg-rose-50 text-rose-600' : 'bg-gray-50 text-gray-400'
+                                        isDown ? 'bg-rose-50 text-rose-600' : 'bg-gray-50 text-gray-400'
                                         }`}>
                                         {isUp ? <CheckCircle2 className="h-3 w-3" /> : isDown ? <XCircle className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
                                         {status.status}
@@ -171,7 +180,7 @@ function StatCard({ label, value, status, icon: Icon }: any) {
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
             <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-xl ${status === 'up' ? 'bg-emerald-50 text-emerald-600' :
-                        status === 'down' ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'
+                    status === 'down' ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'
                     }`}>
                     <Icon className="h-6 w-6" />
                 </div>

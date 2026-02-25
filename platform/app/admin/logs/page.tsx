@@ -41,14 +41,23 @@ export default function GlobalLogsPage() {
                 }
                 setAuthorized(true);
             } catch (e) {
+                console.error("Auth check failed:", e);
                 window.location.href = '/login';
             }
         };
         checkAuth();
+    }, []);
+
+    useEffect(() => {
+        if (!authorized) return;
 
         // 1. Fetch global history
         api.get('/logs/history/all/stream')
-            .then(data => setLogs(data.reverse()))
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setLogs(data.reverse());
+                }
+            })
             .catch(err => console.error("Global history fetch failed:", err));
 
         // 2. Setup Real-time connection
@@ -73,9 +82,13 @@ export default function GlobalLogsPage() {
         return () => {
             socket.disconnect();
         };
-    }, []);
+    }, [authorized]);
 
-    if (!authorized) return null;
+    if (!authorized) return (
+        <div className="h-screen flex items-center justify-center bg-[#030708] text-white">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        </div>
+    );
 
     useEffect(() => {
         if (!isPaused && scrollRef.current) {
@@ -195,20 +208,20 @@ export default function GlobalLogsPage() {
                             {filteredLogs.map((log) => (
                                 <div key={log.id} className="flex gap-6 py-2 border-b border-white/[0.02] hover:bg-white/[0.03] transition-all group">
                                     <span className="text-gray-600 whitespace-nowrap min-w-[120px] font-bold">
-                                        {new Date(log.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        {log.created_at ? new Date(log.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '00:00:00'}
                                     </span>
                                     <span className="text-orange-900/60 font-black min-w-[140px] truncate uppercase text-[11px] tracking-tighter">
-                                        ID: {log.project_id}
+                                        ID: {log.project_id || 'system'}
                                     </span>
-                                    <span className={`min-w-[80px] text-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter bg-white/5 ${getLevelColor(log.level)}`}>
-                                        {log.level}
+                                    <span className={`min-w-[80px] text-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter bg-white/5 ${getLevelColor(log.level || 'info')}`}>
+                                        {log.level || 'INFO'}
                                     </span>
                                     <span className="text-white/40 font-bold min-w-[110px] uppercase text-[11px]">
-                                        {log.service_name}
+                                        {log.service_name || 'unknown'}
                                     </span>
                                     <div className="h-4 w-[1px] bg-white/5"></div>
                                     <span className="text-gray-400 group-hover:text-white transition-all flex-1">
-                                        {log.message}
+                                        {log.message || ''}
                                     </span>
                                 </div>
                             ))}
