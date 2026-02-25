@@ -72,6 +72,19 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+const authenticateAppToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(401).json({ error: "App Access Denied" });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: "Invalid App Token" });
+        req.app_user = user;
+        next();
+    });
+};
+
 const initDB = async () => {
     try {
         await pool.query(`
