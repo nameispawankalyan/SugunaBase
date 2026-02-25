@@ -160,7 +160,7 @@ export default function Dashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
-                                    {filteredDevs.map(dev => (
+                                    {filteredDevs.length > 0 ? filteredDevs.map(dev => (
                                         <tr
                                             key={dev.id}
                                             className={`hover:bg-orange-50/30 transition-colors cursor-pointer ${selectedDev?.id === dev.id ? 'bg-orange-50/50' : ''}`}
@@ -169,7 +169,7 @@ export default function Dashboard() {
                                             <td className="px-6 py-5">
                                                 <div className="flex items-center gap-3">
                                                     <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-orange-400 to-rose-400 flex items-center justify-center text-white font-bold">
-                                                        {dev.name[0]}
+                                                        {dev.name?.[0] || 'U'}
                                                     </div>
                                                     <div>
                                                         <p className="font-bold text-gray-900">{dev.name}</p>
@@ -191,7 +191,16 @@ export default function Dashboard() {
                                                 <ChevronRight className="h-5 w-5 text-gray-300 inline" />
                                             </td>
                                         </tr>
-                                    ))}
+                                    )) : (
+                                        <tr>
+                                            <td colSpan={4} className="px-6 py-12 text-center">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <Users className="h-8 w-8 text-gray-200" />
+                                                    <p className="text-gray-400 font-medium">No developers found in the system</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>

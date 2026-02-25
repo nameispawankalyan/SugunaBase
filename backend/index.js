@@ -135,6 +135,10 @@ const initDB = async () => {
 
             // Backfill developer_id for existing users
             await pool.query(`UPDATE users SET developer_id = 'dev-' || LOWER(REPLACE(name, ' ', '-')) || '-' || id WHERE developer_id IS NULL;`);
+
+            // CRITICAL: Ensure every user has a role and is active
+            await pool.query(`UPDATE users SET role = 'developer' WHERE role IS NULL OR role = '';`);
+            await pool.query(`UPDATE users SET is_active = TRUE WHERE is_active IS NULL;`);
         } catch (e) { }
 
         await pool.query(`
@@ -1204,12 +1208,33 @@ const authenticateAdmin = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ error: "Access Denied" });
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err || user.role !== 'admin') {
-            return res.status(403).json({ error: "Admin access only" });
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
+        if (err) return res.status(403).json({ error: "Invalid Token" });
+
+        try {
+            // Fetch latest user data from DB to verify Admin role
+            const result = await pool.query('SELECT id, name, email, role, is_active FROM users WHERE id = $1', [decoded.id]);
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({ error: "User not found" });
+            }
+
+            const user = result.rows[0];
+
+            if (!user.is_active) {
+                return res.status(403).json({ error: "Account Deactivated", code: 'ACCOUNT_DISABLED' });
+            }
+
+            if (user.role !== 'admin') {
+                return res.status(403).json({ error: "Forbidden: Admin access only" });
+            }
+
+            req.user = user;
+            next();
+        } catch (e) {
+            console.error("[ADMIN AUTH ERROR]", e);
+            res.status(500).json({ error: "Internal Server Auth Error" });
         }
-        req.user = user;
-        next();
     });
 };
 
@@ -1218,12 +1243,17 @@ const authenticateAdmin = (req, res, next) => {
 // List all developers with project counts
 app.get('/v1/admin/users', authenticateAdmin, async (req, res) => {
     try {
-        console.log(`[ADMIN] Fetching user list...`);
+        console.log(`[ADMIN] Fetching user list requested by ${req.user.email}`);
+
+        // Count total users for debugging
+        const totalCount = await pool.query('SELECT COUNT(*) FROM users');
+        console.log(`[ADMIN] Total users in DB: ${totalCount.rows[0].count}`);
+
         const result = await pool.query(`
-            SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at,
+            SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at, u.developer_id,
             (SELECT COUNT(*) FROM projects WHERE user_id = u.id) as project_count
             FROM users u
-            WHERE u.role != 'admin'
+            WHERE LOWER(role) != 'admin' OR role IS NULL
             ORDER BY u.created_at DESC
         `);
         console.log(`[ADMIN] Found ${result.rows.length} non-admin users.`);

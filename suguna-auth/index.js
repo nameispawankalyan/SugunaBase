@@ -37,10 +37,14 @@ app.post('/signup', async (req, res) => {
         const devId = `dev-${slug}-${randomStr}`;
 
         const result = await pool.query(
-            'INSERT INTO users (email, password_hash, name, developer_id) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role, is_active, developer_id',
-            [email, hashedPassword, name, devId]
+            'INSERT INTO users (email, password_hash, name, developer_id, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role, is_active, developer_id',
+            [email, hashedPassword, name, devId, 'developer']
         );
-        const token = jwt.sign({ id: result.rows[0].id }, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(
+            { id: result.rows[0].id, role: result.rows[0].role, email: result.rows[0].email },
+            JWT_SECRET,
+            { expiresIn: '1d' }
+        );
         res.status(201).json({ user: result.rows[0], token });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -68,7 +72,11 @@ app.post('/login', async (req, res) => {
         }
 
         console.log(`[AUTH] Login Success: ${email}`);
-        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(
+            { id: user.id, role: user.role, email: user.email },
+            JWT_SECRET,
+            { expiresIn: '1d' }
+        );
         res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, developer_id: user.developer_id }, token });
     } catch (e) {
         console.error(`[AUTH] Login Crash: ${e.message}`);
