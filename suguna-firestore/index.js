@@ -103,26 +103,28 @@ app.patch('/data/*', async (req, res) => {
     const project_id = req.headers['x-project-id'];
     const updateData = req.body;
 
+    if (!project_id) return res.status(400).json({ error: "Missing x-project-id header" });
     if (segments.length % 2 !== 0) return res.status(400).json({ error: "Must point to a document" });
 
     const document_id = segments.pop();
     const collection_name = segments.join('/');
 
     try {
-        const result = await pool.query(
-            'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-            [project_id, collection_name, document_id]
-        );
-        if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
-
-        const newData = { ...result.rows[0].data, ...updateData };
+        // UPSERT with JSONB Merge
         await pool.query(
-            'UPDATE firestore_data SET data = $1 WHERE project_id = $2 AND collection_name = $3 AND document_id = $4',
-            [newData, project_id, collection_name, document_id]
+            `INSERT INTO firestore_data (project_id, collection_name, document_id, data) 
+             VALUES ($1, $2, $3, $4) 
+             ON CONFLICT (project_id, collection_name, document_id) 
+             DO UPDATE SET data = firestore_data.data || EXCLUDED.data, updated_at = CURRENT_TIMESTAMP`,
+            [project_id, collection_name, document_id, updateData]
         );
+
         trackUsage(project_id, 'write');
-        res.json({ message: "Document updated" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        res.json({ message: "Document updated (upserted)" });
+    } catch (e) {
+        console.error("[Firestore] Patch Error:", e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.delete('/data/*', async (req, res) => {
