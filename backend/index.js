@@ -184,6 +184,9 @@ const initDB = async () => {
                 package_name VARCHAR(255),
                 google_sign_in_enabled BOOLEAN DEFAULT FALSE,
                 google_client_id VARCHAR(255),
+                email_auth_enabled BOOLEAN DEFAULT FALSE,
+                phone_auth_enabled BOOLEAN DEFAULT FALSE,
+                anonymous_auth_enabled BOOLEAN DEFAULT FALSE,
                 project_id VARCHAR(100) UNIQUE,
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -192,6 +195,9 @@ const initDB = async () => {
         // Migration for project features
         try {
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS google_sign_in_enabled BOOLEAN DEFAULT FALSE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS email_auth_enabled BOOLEAN DEFAULT FALSE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS phone_auth_enabled BOOLEAN DEFAULT FALSE;`);
+            await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS anonymous_auth_enabled BOOLEAN DEFAULT FALSE;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_id VARCHAR(100) UNIQUE;`);
             await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
 
@@ -951,13 +957,38 @@ app.put('/v1/projects/:id/sha', authenticateToken, resolveProject, async (req, r
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Update Project Name and Google Client ID
+// Update Project Name and General Info
 app.put('/v1/projects/:id', authenticateToken, resolveProject, async (req, res) => {
     const { name, google_client_id } = req.body;
     try {
         const result = await pool.query(
             'UPDATE projects SET name = $1, google_client_id = $2 WHERE id = $3 RETURNING *',
             [name, google_client_id, req.project.id]
+        );
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Update Auth Methods Configuration
+app.put('/v1/projects/:id/auth-methods', authenticateToken, resolveProject, async (req, res) => {
+    const { google_sign_in_enabled, google_client_id, email_auth_enabled, phone_auth_enabled, anonymous_auth_enabled } = req.body;
+    try {
+        const result = await pool.query(
+            `UPDATE projects SET 
+                google_sign_in_enabled = $1, 
+                google_client_id = $2, 
+                email_auth_enabled = $3, 
+                phone_auth_enabled = $4, 
+                anonymous_auth_enabled = $5 
+             WHERE id = $6 RETURNING *`,
+            [
+                google_sign_in_enabled ?? req.project.google_sign_in_enabled,
+                google_client_id ?? req.project.google_client_id,
+                email_auth_enabled ?? req.project.email_auth_enabled,
+                phone_auth_enabled ?? req.project.phone_auth_enabled,
+                anonymous_auth_enabled ?? req.project.anonymous_auth_enabled,
+                req.project.id
+            ]
         );
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1056,6 +1087,13 @@ app.get('/v1/projects/:id/config', authenticateToken, resolveProject, async (req
                 "project_name": project.name,
                 "project_number": "1",
                 "endpoint": "https://api.suguna.co/v1"
+            },
+            "auth_info": {
+                "google_sign_in_enabled": project.google_sign_in_enabled,
+                "google_client_id": project.google_client_id,
+                "email_auth_enabled": project.email_auth_enabled,
+                "phone_auth_enabled": project.phone_auth_enabled,
+                "anonymous_auth_enabled": project.anonymous_auth_enabled
             },
             "client": apps.map(app => ({
                 "client_info": {
