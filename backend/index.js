@@ -99,11 +99,11 @@ const authenticateAppToken = (req, res, next) => {
 // Middleware to resolve Project ID (Slug -> Numeric) and check if active
 // Middleware to resolve Project ID (Slug -> Numeric) and check if active + Ownership Security
 const resolveProject = async (req, res, next) => {
-    let projectIdRaw = req.params.projectId || req.params.id || req.body.project_id || req.headers['x-project-id'];
+    let projectIdRaw = req.params.projectId || req.params.id || (req.body && req.body.project_id) || req.headers['x-project-id'];
     if (!projectIdRaw) return next();
 
     try {
-        const isNumeric = /^\d+$/.test(projectIdRaw);
+        const isNumeric = /^\d+$/.test(String(projectIdRaw));
         const query = isNumeric
             ? `SELECT p.*, (SELECT ARRAY_AGG(DISTINCT platform) FROM project_apps WHERE project_id = p.id) as platforms FROM projects p WHERE p.id = $1`
             : `SELECT p.*, (SELECT ARRAY_AGG(DISTINCT platform) FROM project_apps WHERE project_id = p.id) as platforms FROM projects p WHERE p.project_id = $1`;
@@ -111,39 +111,27 @@ const resolveProject = async (req, res, next) => {
         const result = await pool.query(query, [projectIdRaw]);
 
         if (result.rows.length === 0) {
+            console.warn(`[Gateway] Project not found for: ${projectIdRaw}`);
             return res.status(404).json({ error: "Project not found" });
         }
 
         const project = result.rows[0];
 
-        // 1. Check if project is active
         if (!project.is_active) {
             return res.status(403).json({ error: "This project has been deactivated by the administrator." });
         }
 
-        // 2. SECURITY: Verify Ownership for Console Users
-        // If req.user is present (from authenticateToken), they MUST be the owner OR an admin
         if (req.user) {
             if (project.user_id !== req.user.id && req.user.role !== 'admin') {
-                console.warn(`🚨 [SECURITY] Unauthorized Project Access Attempt by ${req.user.email} on Project ${project.name}`);
-                return res.status(403).json({ error: "Access Denied: You do not have permission to view this project." });
+                return res.status(403).json({ error: "Access Denied: Unauthorized project access." });
             }
         }
 
-        const actualId = project.id.toString();
-
-        // Inject resolved numeric ID back into params/headers
-        if (req.params.projectId) req.params.projectId = actualId;
-        if (req.params.id) req.params.id = actualId;
-        if (req.headers['x-project-id']) req.headers['x-project-id'] = actualId;
-
-        // Attach project data to request object for convenience
         req.project = project;
-
         next();
     } catch (e) {
-        console.error("Project Resolution Error:", e.message);
-        res.status(500).json({ error: "Internal Project Resolution Error" });
+        console.error("[Gateway] Project Resolution Error:", e.message);
+        next();
     }
 };
 
@@ -637,17 +625,22 @@ app.all('/v1/firestore/*', authenticateAppToken, resolveProject, (req, res) => {
 // STORAGE PROXY (suguna-storage: 3500)
 // ====================================================
 // Handle Static Files
-app.use(createProxyMiddleware('/storage', {
+app.use('/storage', createProxyMiddleware({
     target: 'http://localhost:3500',
     pathRewrite: { '^/storage': '/files' },
-    changeOrigin: true
+    changeOrigin: true,
+    onError: (err, req, res) => {
+        console.error("[Proxy Error] /storage:", err.message);
+        res.status(500).send("Storage Proxy Error");
+    }
 }));
 
 // Handle App Uploads
 app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, next) => {
-    // Inject headers for the storage service to consume
-    req.headers['x-project-id'] = req.project.id; // Use numeric ID
-    req.headers['x-folder-path'] = req.headers['x-folder-path'] || req.body.folder_path || '';
+    if (!req.project) return res.status(404).json({ error: "Project lookup failed for upload" });
+
+    req.headers['x-project-id'] = req.project.id;
+    req.headers['x-folder-path'] = req.headers['x-folder-path'] || (req.body && req.body.folder_path) || '';
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
 }, createProxyMiddleware({
@@ -658,8 +651,10 @@ app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, 
 
 // Handle Console Uploads
 app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, resolveProject, (req, res, next) => {
-    req.headers['x-project-id'] = req.project.id; // Use numeric ID for consistency
-    req.headers['x-folder-path'] = req.body.folder_path || '';
+    if (!req.project) return res.status(404).json({ error: "Project lookup failed for console upload" });
+
+    req.headers['x-project-id'] = req.project.id;
+    req.headers['x-folder-path'] = (req.body && req.body.folder_path) || '';
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
 }, createProxyMiddleware({
