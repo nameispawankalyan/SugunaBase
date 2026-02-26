@@ -639,7 +639,7 @@ app.all('/v1/firestore/*', authenticateAppToken, resolveProject, (req, res) => {
 
     axios({
         method: req.method,
-        url: `http://localhost:3400/data/${fullPath}`,
+        url: `http://127.0.0.1:3400/data/${fullPath}`,
         data: req.body,
         params: req.query,
         headers: { 'x-project-id': project_id }
@@ -654,7 +654,7 @@ app.all('/v1/firestore/*', authenticateAppToken, resolveProject, (req, res) => {
 // ====================================================
 // Handle Static Files
 app.use('/storage', createProxyMiddleware({
-    target: 'http://localhost:3500/files', // Append /files to the target
+    target: 'http://127.0.0.1:3500/files', // Append /files to the target
     changeOrigin: true,
     pathRewrite: { '^/storage': '' }, // Strip /storage so it matches the target root
     onError: (err, req, res) => {
@@ -672,7 +672,7 @@ app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, 
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
 }, createProxyMiddleware({
-    target: 'http://localhost:3500',
+    target: 'http://127.0.0.1:3500',
     pathRewrite: { '^/v1/storage/upload': '/upload' },
     changeOrigin: true
 }));
@@ -686,7 +686,7 @@ app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, re
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
 }, createProxyMiddleware({
-    target: 'http://localhost:3500',
+    target: 'http://127.0.0.1:3500',
     pathRewrite: { '^/v1/console/projects/[^/]+/storage/upload': '/upload' },
     changeOrigin: true
 }));
@@ -694,7 +694,7 @@ app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, re
 // Console Storage Management
 app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, resolveProject, (req, res) => {
     const projSlug = req.project ? req.project.project_id : req.params.projectId;
-    axios.post('http://localhost:3500/folder', { projectId: projSlug, ...req.body })
+    axios.post('http://127.0.0.1:3500/folder', { projectId: projSlug, ...req.body })
         .then(r => res.json(r.data))
         .catch(e => {
             console.error(`[Gateway] Create Folder Error: ${e.message}`);
@@ -706,7 +706,7 @@ app.delete('/v1/console/projects/:projectId/storage', authenticateToken, resolve
     const projSlug = req.project ? req.project.project_id : req.params.projectId;
     const numericId = req.project ? req.project.id : '';
 
-    axios.delete(`http://localhost:3500/delete/${projSlug}?altId=${numericId}`, { data: req.body })
+    axios.delete(`http://127.0.0.1:3500/delete/${projSlug}?altId=${numericId}`, { data: req.body })
         .then(r => res.json(r.data))
         .catch(e => {
             console.error(`[Gateway] Delete Storage Error: ${e.message}`);
@@ -719,10 +719,17 @@ app.get('/v1/console/projects/:projectId/storage', authenticateToken, resolvePro
     const projSlug = req.project ? req.project.project_id : req.params.projectId;
     const numericId = req.project ? req.project.id : '';
 
-    axios.get(`http://localhost:3500/list/${projSlug}?altId=${numericId}`)
+    console.log(`[Gateway] Fetching storage for Project: ${projSlug} (Numeric ID: ${numericId})`);
+
+    axios.get(`http://127.0.0.1:3500/list/${projSlug}?altId=${numericId}`)
         .then(r => res.json(r.data))
         .catch(e => {
-            console.error(`[Gateway] List Storage Error (Project: ${projSlug}): ${e.message}`);
+            console.error(`[Gateway] List Storage Error (Project: ${projSlug}):`, {
+                message: e.message,
+                status: e.response?.status,
+                data: e.response?.data,
+                code: e.code
+            });
             res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
         });
 });
