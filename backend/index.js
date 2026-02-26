@@ -99,7 +99,7 @@ const authenticateAppToken = (req, res, next) => {
 // Middleware to resolve Project ID (Slug -> Numeric) and check if active
 // Middleware to resolve Project ID (Slug -> Numeric) and check if active + Ownership Security
 const resolveProject = async (req, res, next) => {
-    let projectIdRaw = req.params.projectId || req.params.id || req.headers['x-project-id'];
+    let projectIdRaw = req.params.projectId || req.params.id || req.body.project_id || req.headers['x-project-id'];
     if (!projectIdRaw) return next();
 
     try {
@@ -563,7 +563,12 @@ app.post('/v1/auth/reset-password', (req, res) => {
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
-app.post('/v1/auth/app-login', (req, res) => {
+app.post('/v1/auth/app-login', resolveProject, (req, res) => {
+    // If resolveProject found a project, use its numeric ID
+    if (req.project) {
+        req.body.project_id = req.project.id;
+    }
+
     axios.post('http://localhost:3300/app-login', req.body)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
