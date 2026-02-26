@@ -127,9 +127,14 @@ const resolveProject = async (req, res, next) => {
             }
         }
 
-        // Attach project data to request object for convenience
-        req.project = project;
+        const actualId = project.id.toString();
 
+        // Inject resolved numeric ID back into params/headers so downstream routes use it
+        if (req.params.projectId) req.params.projectId = actualId;
+        if (req.params.id) req.params.id = actualId;
+        if (req.headers['x-project-id']) req.headers['x-project-id'] = actualId;
+
+        req.project = project;
         next();
     } catch (e) {
         console.error("[Gateway] Project Resolution Error:", e.message);
@@ -667,19 +672,19 @@ app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, re
 
 // Console Storage Management
 app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, resolveProject, (req, res) => {
-    axios.post('http://localhost:3500/folder', { projectId: req.params.projectId, ...req.body })
+    axios.post('http://localhost:3500/folder', { projectId: req.project.project_id, ...req.body })
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 app.delete('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
-    axios.delete(`http://localhost:3500/delete/${req.params.projectId}`, { data: req.body })
+    axios.delete(`http://localhost:3500/delete/${req.project.project_id}`, { data: req.body })
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 app.get('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
-    axios.get(`http://localhost:3500/list/${req.params.projectId}`)
+    axios.get(`http://localhost:3500/list/${req.project.project_id}`)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
