@@ -99,7 +99,7 @@ const authenticateAppToken = (req, res, next) => {
 // Middleware to resolve Project ID (Slug -> Numeric) and check if active
 // Middleware to resolve Project ID (Slug -> Numeric) and check if active + Ownership Security
 const resolveProject = async (req, res, next) => {
-    let projectIdRaw = req.params.projectId || req.params.id || (req.body && req.body.project_id) || req.headers['x-project-id'];
+    let projectIdRaw = req.params.projectId || req.params.id || (req.body && req.body.project_id) || req.headers['x-project-id'] || (req.app_user && req.app_user.project_id);
     if (!projectIdRaw) return next();
 
     try {
