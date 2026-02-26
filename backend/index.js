@@ -637,7 +637,7 @@ app.all('/v1/firestore/*', authenticateAppToken, resolveProject, (req, res) => {
 // STORAGE PROXY (suguna-storage: 3500)
 // ====================================================
 // Handle Static Files
-app.use('/storage', createProxyMiddleware({
+app.use(createProxyMiddleware('/storage', {
     target: 'http://localhost:3500',
     pathRewrite: { '^/storage': '/files' },
     changeOrigin: true
@@ -646,8 +646,8 @@ app.use('/storage', createProxyMiddleware({
 // Handle App Uploads
 app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, next) => {
     // Inject headers for the storage service to consume
-    req.headers['x-project-id'] = req.app_user.project_id;
-    req.headers['x-folder-path'] = req.body.folder_path || '';
+    req.headers['x-project-id'] = req.project.id; // Use numeric ID
+    req.headers['x-folder-path'] = req.headers['x-folder-path'] || req.body.folder_path || '';
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
 }, createProxyMiddleware({
@@ -658,7 +658,7 @@ app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, 
 
 // Handle Console Uploads
 app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, resolveProject, (req, res, next) => {
-    req.headers['x-project-id'] = req.params.projectId;
+    req.headers['x-project-id'] = req.project.id; // Use numeric ID for consistency
     req.headers['x-folder-path'] = req.body.folder_path || '';
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
