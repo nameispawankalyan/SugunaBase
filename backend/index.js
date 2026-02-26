@@ -127,14 +127,9 @@ const resolveProject = async (req, res, next) => {
             }
         }
 
-        const actualId = project.id.toString();
-
-        // Inject resolved numeric ID back into params/headers so downstream routes use it
-        if (req.params.projectId) req.params.projectId = actualId;
-        if (req.params.id) req.params.id = actualId;
-        if (req.headers['x-project-id']) req.headers['x-project-id'] = actualId;
-
+        // Attach project data to request object for convenience
         req.project = project;
+
         next();
     } catch (e) {
         console.error("[Gateway] Project Resolution Error:", e.message);
@@ -646,7 +641,7 @@ app.use('/storage', createProxyMiddleware({
 app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, next) => {
     if (!req.project) return res.status(404).json({ error: "Project lookup failed for upload" });
 
-    req.headers['x-project-id'] = req.project.id;
+    req.headers['x-project-id'] = req.project.project_id;
     req.headers['x-folder-path'] = req.headers['x-folder-path'] || (req.body && req.body.folder_path) || '';
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
@@ -660,7 +655,7 @@ app.post('/v1/storage/upload', authenticateAppToken, resolveProject, (req, res, 
 app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, resolveProject, (req, res, next) => {
     if (!req.project) return res.status(404).json({ error: "Project lookup failed for console upload" });
 
-    req.headers['x-project-id'] = req.project.id;
+    req.headers['x-project-id'] = req.project.project_id;
     req.headers['x-folder-path'] = (req.body && req.body.folder_path) || '';
     req.headers['x-public-host'] = `${req.protocol}://${req.get('host')}`;
     next();
