@@ -127,6 +127,13 @@ const resolveProject = async (req, res, next) => {
             }
         }
 
+        const actualId = project.id.toString();
+
+        // Inject resolved numeric ID back into params/headers so downstream routes use it
+        if (req.params.projectId) req.params.projectId = actualId;
+        if (req.params.id) req.params.id = actualId;
+        if (req.headers['x-project-id']) req.headers['x-project-id'] = actualId;
+
         req.project = project;
         next();
     } catch (e) {
