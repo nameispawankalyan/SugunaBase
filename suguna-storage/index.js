@@ -24,6 +24,32 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// 0. Initialize Table
+const initTable = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS storage_files (
+                id SERIAL PRIMARY KEY,
+                project_id VARCHAR(100), -- Store as string to support both numeric and slugs
+                folder_path TEXT DEFAULT '',
+                file_name VARCHAR(255) NOT NULL,
+                file_url TEXT NOT NULL,
+                file_type VARCHAR(100),
+                file_size BIGINT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // Migrate column type if it's currently integer (common issue)
+        try {
+            await pool.query('ALTER TABLE storage_files ALTER COLUMN project_id TYPE VARCHAR(100);');
+        } catch (e) { /* ignore if already varchar */ }
+        console.log("✅ storage_files table ready");
+    } catch (e) {
+        console.error("❌ Storage Table Init Error:", e.message);
+    }
+};
+initTable();
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const projId = req.headers['x-project-id'] || 'shared';
@@ -90,11 +116,13 @@ app.post('/folder', async (req, res) => {
 
 // 3. List Files
 app.get('/list/:projectId', async (req, res) => {
-    const { projectId } = req.params;
+    const { projectId } = req.params; // slug or original ID
+    const { altId } = req.query;     // optional numeric ID
+
     try {
         const result = await pool.query(
-            'SELECT * FROM storage_files WHERE project_id = $1 ORDER BY created_at DESC',
-            [projectId]
+            'SELECT * FROM storage_files WHERE project_id = $1 OR project_id = $2 ORDER BY created_at DESC',
+            [projectId, altId || projectId]
         );
         res.json(result.rows);
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -103,19 +131,19 @@ app.get('/list/:projectId', async (req, res) => {
 // 4. Delete Files/Folders
 app.delete('/delete/:projectId', async (req, res) => {
     const { projectId } = req.params;
+    const { altId } = req.query;
     const { ids, folderPaths } = req.body;
 
     try {
         let deletedCount = 0;
         if (ids && ids.length > 0) {
-            const result = await pool.query(`DELETE FROM storage_files WHERE project_id = $1 AND id = ANY($2::int[]) RETURNING *`, [projectId, ids]);
+            const result = await pool.query(`DELETE FROM storage_files WHERE (project_id = $1 OR project_id = $2) AND id = ANY($3::int[]) RETURNING *`, [projectId, altId || projectId, ids]);
             deletedCount += result.rowCount;
-            // Note: Actual disk deletion could be added here
         }
 
         if (folderPaths && folderPaths.length > 0) {
             for (let fp of folderPaths) {
-                const result = await pool.query(`DELETE FROM storage_files WHERE project_id = $1 AND (folder_path = $2 OR folder_path LIKE $3)`, [projectId, fp, `${fp}/%`]);
+                const result = await pool.query(`DELETE FROM storage_files WHERE (project_id = $1 OR project_id = $2) AND (folder_path = $3 OR folder_path LIKE $4)`, [projectId, altId || projectId, fp, `${fp}/%`]);
                 deletedCount += result.rowCount;
             }
         }

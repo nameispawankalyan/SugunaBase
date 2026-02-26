@@ -469,6 +469,23 @@ const initDB = async () => {
             );
         `);
 
+        // Storage Table (Consolidated)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS storage_files (
+                id SERIAL PRIMARY KEY,
+                project_id VARCHAR(100), 
+                folder_path TEXT DEFAULT '',
+                file_name VARCHAR(255) NOT NULL,
+                file_url TEXT NOT NULL,
+                file_type VARCHAR(100),
+                file_size BIGINT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        try {
+            await pool.query('ALTER TABLE storage_files ALTER COLUMN project_id TYPE VARCHAR(100);');
+        } catch (e) { }
+
         console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs, Cast & Analytics)");
         initSchedules(); // Start the Cron Engine
     } catch (err) {
@@ -687,7 +704,9 @@ app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, re
 
 app.delete('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
     const projSlug = req.project ? req.project.project_id : req.params.projectId;
-    axios.delete(`http://localhost:3500/delete/${projSlug}`, { data: req.body })
+    const numericId = req.project ? req.project.id : '';
+
+    axios.delete(`http://localhost:3500/delete/${projSlug}?altId=${numericId}`, { data: req.body })
         .then(r => res.json(r.data))
         .catch(e => {
             console.error(`[Gateway] Delete Storage Error: ${e.message}`);
@@ -698,7 +717,9 @@ app.delete('/v1/console/projects/:projectId/storage', authenticateToken, resolve
 app.get('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
     // If resolveProject worked, we have the slug in req.project.project_id
     const projSlug = req.project ? req.project.project_id : req.params.projectId;
-    axios.get(`http://localhost:3500/list/${projSlug}`)
+    const numericId = req.project ? req.project.id : '';
+
+    axios.get(`http://localhost:3500/list/${projSlug}?altId=${numericId}`)
         .then(r => res.json(r.data))
         .catch(e => {
             console.error(`[Gateway] List Storage Error (Project: ${projSlug}): ${e.message}`);
