@@ -127,10 +127,17 @@ const resolveProject = async (req, res, next) => {
             }
         }
 
+        const actualId = project.id.toString();
+        const slugId = project.project_id;
+
         req.project = project;
-        // Do NOT overwrite req.params.projectId with slug yet, as some SQL routes use it
-        // Instead, ensure x-project-id header is the slug for microservices
-        req.headers['x-project-id'] = project.project_id;
+
+        // Overwrite req.params with the NUMERIC ID for Gateway SQL queries
+        if (req.params.projectId) req.params.projectId = actualId;
+        if (req.params.id) req.params.id = actualId;
+
+        // Pass the SLUG (string ID) to microservices via header
+        req.headers['x-project-id'] = slugId;
 
         next();
     } catch (e) {
@@ -689,8 +696,8 @@ app.delete('/v1/console/projects/:projectId/storage', authenticateToken, resolve
 });
 
 app.get('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
-    // Pass the SLUG to the storage service list endpoint
-    const projSlug = req.project.project_id;
+    // If resolveProject worked, we have the slug in req.project.project_id
+    const projSlug = req.project ? req.project.project_id : req.params.projectId;
     axios.get(`http://localhost:3500/list/${projSlug}`)
         .then(r => res.json(r.data))
         .catch(e => {
