@@ -483,7 +483,13 @@ const initDB = async () => {
             );
         `);
         try {
-            await pool.query('ALTER TABLE storage_files ALTER COLUMN project_id TYPE VARCHAR(100);');
+            const res = await pool.query(`
+                SELECT data_type FROM information_schema.columns 
+                WHERE table_name = 'storage_files' AND column_name = 'project_id'
+            `);
+            if (res.rows.length > 0 && res.rows[0].data_type === 'integer') {
+                await pool.query('ALTER TABLE storage_files ALTER COLUMN project_id TYPE VARCHAR(100) USING project_id::text;');
+            }
         } catch (e) { }
 
         console.log("✅ Database Tables Initialized (including SugunaFirestore, Functions, Logs, Cast & Analytics)");

@@ -41,8 +41,18 @@ const initTable = async () => {
         `);
         // Migrate column type if it's currently integer (common issue)
         try {
-            await pool.query('ALTER TABLE storage_files ALTER COLUMN project_id TYPE VARCHAR(100);');
-        } catch (e) { /* ignore if already varchar */ }
+            const res = await pool.query(`
+                SELECT data_type FROM information_schema.columns 
+                WHERE table_name = 'storage_files' AND column_name = 'project_id'
+            `);
+            if (res.rows.length > 0 && res.rows[0].data_type === 'integer') {
+                console.log("🔄 Migrating storage_files.project_id to VARCHAR...");
+                await pool.query('ALTER TABLE storage_files ALTER COLUMN project_id TYPE VARCHAR(100) USING project_id::text;');
+                console.log("✅ Migration successful");
+            }
+        } catch (e) {
+            console.log("Migration Note:", e.message);
+        }
         console.log("✅ storage_files table ready");
     } catch (e) {
         console.error("❌ Storage Table Init Error:", e.message);
@@ -94,7 +104,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         const result = await pool.query(
             `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [projectId, folder_path, file_name, fileUrl, file_type, file_size]
+            [String(projectId), folder_path, file_name, fileUrl, file_type, file_size]
         );
 
         res.json({ message: "File Uploaded Successfully", data: result.rows[0] });
@@ -108,7 +118,7 @@ app.post('/folder', async (req, res) => {
         const result = await pool.query(
             `INSERT INTO storage_files (project_id, folder_path, file_name, file_url, file_type, file_size) 
              VALUES ($1, $2, '', '', 'Folder', 0) RETURNING *`,
-            [projectId, folder_path]
+            [String(projectId), folder_path]
         );
         res.json({ message: "Folder Created Successfully", data: result.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -122,10 +132,13 @@ app.get('/list/:projectId', async (req, res) => {
     try {
         const result = await pool.query(
             'SELECT * FROM storage_files WHERE project_id = $1 OR project_id = $2 ORDER BY created_at DESC',
-            [projectId, altId || projectId]
+            [String(projectId), String(altId || projectId)]
         );
         res.json(result.rows);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error(`[Storage] List Error: ${e.message}`);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // 4. Delete Files/Folders
@@ -136,14 +149,17 @@ app.delete('/delete/:projectId', async (req, res) => {
 
     try {
         let deletedCount = 0;
+        const projIdStr = String(projectId);
+        const altIdStr = String(altId || projectId);
+
         if (ids && ids.length > 0) {
-            const result = await pool.query(`DELETE FROM storage_files WHERE (project_id = $1 OR project_id = $2) AND id = ANY($3::int[]) RETURNING *`, [projectId, altId || projectId, ids]);
+            const result = await pool.query(`DELETE FROM storage_files WHERE (project_id = $1 OR project_id = $2) AND id = ANY($3::int[]) RETURNING *`, [projIdStr, altIdStr, ids]);
             deletedCount += result.rowCount;
         }
 
         if (folderPaths && folderPaths.length > 0) {
             for (let fp of folderPaths) {
-                const result = await pool.query(`DELETE FROM storage_files WHERE (project_id = $1 OR project_id = $2) AND (folder_path = $3 OR folder_path LIKE $4)`, [projectId, altId || projectId, fp, `${fp}/%`]);
+                const result = await pool.query(`DELETE FROM storage_files WHERE (project_id = $1 OR project_id = $2) AND (folder_path = $3 OR folder_path LIKE $4)`, [projIdStr, altIdStr, fp, `${fp}/%`]);
                 deletedCount += result.rowCount;
             }
         }
@@ -151,6 +167,6 @@ app.delete('/delete/:projectId', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(port, '127.0.0.1', () => {
-    console.log(`📦 Suguna Storage Microservice running on port ${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`📦 Suguna Storage Microservice running on port ${port} (All Interfaces)`);
 });
