@@ -633,12 +633,12 @@ app.all('/v1/firestore/*', authenticateAppToken, resolveProject, (req, res) => {
 // ====================================================
 // Handle Static Files
 app.use('/storage', createProxyMiddleware({
-    target: 'http://localhost:3500',
-    pathRewrite: { '^/storage': '/files' },
+    target: 'http://localhost:3500/files', // Append /files to the target
     changeOrigin: true,
+    pathRewrite: { '^/storage': '' }, // Strip /storage so it matches the target root
     onError: (err, req, res) => {
         console.error("[Proxy Error] /storage:", err.message);
-        res.status(500).send("Storage Proxy Error");
+        res.status(500).send("Storage Proxy Error: Unable to reach file service.");
     }
 }));
 
