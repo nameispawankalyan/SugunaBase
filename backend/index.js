@@ -672,21 +672,33 @@ app.post('/v1/console/projects/:projectId/storage/upload', authenticateToken, re
 
 // Console Storage Management
 app.post('/v1/console/projects/:projectId/storage/folder', authenticateToken, resolveProject, (req, res) => {
-    axios.post('http://localhost:3500/folder', { projectId: req.project.project_id, ...req.body })
+    const projSlug = req.project ? req.project.project_id : req.params.projectId;
+    axios.post('http://localhost:3500/folder', { projectId: projSlug, ...req.body })
         .then(r => res.json(r.data))
-        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+        .catch(e => {
+            console.error(`[Gateway] Create Folder Error: ${e.message}`);
+            res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
+        });
 });
 
 app.delete('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
-    axios.delete(`http://localhost:3500/delete/${req.project.project_id}`, { data: req.body })
+    const projSlug = req.project ? req.project.project_id : req.params.projectId;
+    axios.delete(`http://localhost:3500/delete/${projSlug}`, { data: req.body })
         .then(r => res.json(r.data))
-        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+        .catch(e => {
+            console.error(`[Gateway] Delete Storage Error: ${e.message}`);
+            res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
+        });
 });
 
 app.get('/v1/console/projects/:projectId/storage', authenticateToken, resolveProject, (req, res) => {
-    axios.get(`http://localhost:3500/list/${req.project.project_id}`)
+    const projSlug = req.project ? req.project.project_id : req.params.projectId;
+    axios.get(`http://localhost:3500/list/${projSlug}`)
         .then(r => res.json(r.data))
-        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+        .catch(e => {
+            console.error(`[Gateway] List Storage Error (Project: ${projSlug}): ${e.message}`);
+            res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
+        });
 });
 // ====================================================
 
