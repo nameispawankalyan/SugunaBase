@@ -31,10 +31,12 @@ class SugunaStorage private constructor() {
             return
         }
 
-        val mediaType = "application/octet-stream".toMediaTypeOrNull()
-        val requestFile = file.asRequestBody(mediaType)
+        val extension = android.webkit.MimeTypeMap.getFileExtensionFromUrl(file.path)
+        val mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+        
+        val requestFile = file.asRequestBody(mimeType.toMediaTypeOrNull())
         val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
-        val folderBody = folderPath.toRequestBody("text/plain".toMediaTypeOrNull())
+        val folderBody = folderPath.trim('/').toRequestBody("text/plain".toMediaTypeOrNull())
 
         SugunaNetwork.api.uploadFile("Bearer ${user.token}", folderBody, body).enqueue(object : Callback<UploadResponse> {
             override fun onResponse(call: Call<UploadResponse>, response: Response<UploadResponse>) {
