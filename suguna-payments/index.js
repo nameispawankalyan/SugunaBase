@@ -243,6 +243,9 @@ app.post('/orders/create', async (req, res) => {
             const isSandbox = config.api_secret && (config.api_secret.includes('test') || config.api_secret.includes('sandbox'));
             const cfBaseUrl = isSandbox ? 'https://sandbox.cashfree.com/pg/orders' : 'https://api.cashfree.com/pg/orders';
 
+            const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+            const host = req.headers['x-forwarded-host'] || req.get('host');
+
             const txnId = `txn_${Date.now()}`;
             const response = await axios.post(cfBaseUrl, {
                 order_id: txnId,
@@ -250,8 +253,11 @@ app.post('/orders/create', async (req, res) => {
                 order_currency: currency || 'INR',
                 customer_details: {
                     customer_id: app_user_id || 'guest',
-                    customer_phone: "9999999999", // Sandbox requires a phone
+                    customer_phone: "9999999999",
                     customer_email: "test@example.com"
+                },
+                order_meta: {
+                    return_url: `${protocol}://${host}/v1/payments/verify/cashfree?order_id={order_id}`
                 }
             }, {
                 headers: {
@@ -268,14 +274,15 @@ app.post('/orders/create', async (req, res) => {
             await pool.query(`
                 INSERT INTO transactions (id, project_id, app_user_id, order_id, amount, currency, gateway, status)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [txnId, projectId, app_user_id, cfOrder.payment_session_id, amount, currency || 'INR', 'cashfree', 'PENDING']);
+            `, [txnId, projectId, app_user_id, cfOrder.order_id, amount, currency || 'INR', 'cashfree', 'PENDING']);
 
-            const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-            const host = req.headers['x-forwarded-host'] || req.get('host');
+            const cfCheckoutUrl = isSandbox
+                ? `https://payments-test.cashfree.com/order/${cfOrder.payment_session_id}`
+                : `https://payments.cashfree.com/order/${cfOrder.payment_session_id}`;
 
             res.json({
                 order_id: cfOrder.order_id,
-                payment_url: `${protocol}://${host}/v1/payments/checkout/cashfree/${projectId}/${cfOrder.payment_session_id}`,
+                payment_url: cfCheckoutUrl,
                 payment_session_id: cfOrder.payment_session_id,
                 amount: amount,
                 currency: currency || 'INR',
@@ -638,6 +645,50 @@ app.post('/webhook/google_play', async (req, res) => {
     }
 });
 
+app.get('/verify/cashfree', async (req, res) => {
+    const { order_id } = req.query;
+    try {
+        // Find transaction
+        const txnRes = await pool.query('SELECT * FROM transactions WHERE order_id = $1 LIMIT 1', [order_id]);
+        if (txnRes.rows.length === 0) return res.send("Transaction not found");
+        const txn = txnRes.rows[0];
+
+        // Get config
+        const config = await getProjectGatewayConfig(txn.project_id, 'cashfree');
+        const isSandbox = config.api_secret && (config.api_secret.includes('test') || config.api_secret.includes('sandbox'));
+        const cfBaseUrl = isSandbox ? 'https://sandbox.cashfree.com/pg/orders' : 'https://api.cashfree.com/pg/orders';
+
+        // Check status with Cashfree
+        const response = await axios.get(`${cfBaseUrl}/${order_id}`, {
+            headers: {
+                'x-client-id': config.api_key,
+                'x-client-secret': config.api_secret,
+                'x-api-version': '2023-08-01'
+            }
+        });
+
+        const order = response.data;
+        if (order.order_status === 'PAID') {
+            await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['SUCCESS', order_id]);
+
+            // Trigger Developer Webhook
+            await triggerDeveloperWebhook(txn.project_id, 'payment.success', {
+                user_id: txn.app_user_id,
+                transaction_id: txn.id,
+                amount: txn.amount,
+                gateway: 'cashfree'
+            });
+
+            res.redirect(`sugunabase://payment/success?id=${order_id}`);
+        } else {
+            res.redirect(`sugunabase://payment/cancel`);
+        }
+    } catch (e) {
+        console.error('[PAYMENTS] Verification Error:', e);
+        res.redirect(`sugunabase://payment/cancel`);
+    }
+});
+
 app.listen(port, '127.0.0.1', () => {
-    console.log(`💰 Suguna Payments Microservice running on port ${port} `);
+    console.log(`💰 Suguna Payments Microservice running on port ${port}`);
 });
