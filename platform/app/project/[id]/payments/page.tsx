@@ -35,11 +35,12 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
     };
 
     const fetchTransactions = async () => {
-        // Placeholder for transactions if endpoint exists
-        // try {
-        //     const data = await api.get(`/payments/transactions`);
-        //     setTransactions(data || []);
-        // } catch(e) {}
+        try {
+            const data = await api.get(`/payments/${id}/transactions`);
+            setTransactions(data || []);
+        } catch (e) {
+            console.error("Failed to fetch transactions", e);
+        }
     };
 
     useEffect(() => {
@@ -160,7 +161,23 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {/* Map through transactions here */}
+                                    {transactions.map((txn: any) => (
+                                        <tr key={txn.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 text-sm font-mono text-gray-600">{txn.id}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">{txn.app_user_id || 'Anonymous'}</td>
+                                            <td className="px-6 py-4 text-sm font-bold text-gray-900">{txn.currency} {txn.amount}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-gray-500 capitalize">{txn.gateway}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${txn.status === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' : txn.status === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
+                                                    {txn.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         )}
@@ -230,12 +247,12 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                         <input
                                             type="text"
                                             readOnly
-                                            value={`https://api.suguna.co/v1/payments/webhooks/${showConfigModal}`}
+                                            value={`https://api.suguna.co/webhook/payments/${showConfigModal}`}
                                             className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-700 text-sm font-mono"
                                         />
                                         <button
                                             onClick={() => {
-                                                navigator.clipboard.writeText(`https://api.suguna.co/v1/payments/webhooks/${showConfigModal}`);
+                                                navigator.clipboard.writeText(`https://api.suguna.co/webhook/payments/${showConfigModal}`);
                                                 alert("Webhook URL Copied!");
                                             }}
                                             className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl text-xs text-white font-bold"

@@ -20,14 +20,10 @@ const pool = new Pool({
 
 const initDB = async () => {
     try {
-        console.log('🔄 Cleaning up and recreating payments schema...');
-
-        // Force drop to ensure the incorrect foreign key constraint is gone
-        await pool.query(`DROP TABLE IF EXISTS transactions CASCADE;`);
-        await pool.query(`DROP TABLE IF EXISTS project_payments_config CASCADE;`);
+        console.log('🔄 Initializing payments schema...');
 
         await pool.query(`
-            CREATE TABLE project_payments_config (
+            CREATE TABLE IF NOT EXISTS project_payments_config (
                 id SERIAL PRIMARY KEY,
                 project_id VARCHAR(100) NOT NULL,
                 gateway VARCHAR(50) NOT NULL,
@@ -42,7 +38,7 @@ const initDB = async () => {
         `);
 
         await pool.query(`
-            CREATE TABLE transactions (
+            CREATE TABLE IF NOT EXISTS transactions (
                 id VARCHAR(100) PRIMARY KEY,
                 project_id VARCHAR(100) NOT NULL,
                 app_user_id VARCHAR(100), 
@@ -57,12 +53,35 @@ const initDB = async () => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Payments Database: FORCE SYNC COMPLETE (Slugs Enabled)');
+
+        // Migration: Ensure project_id is VARCHAR in project_payments_config
+        try {
+            await pool.query('ALTER TABLE project_payments_config ALTER COLUMN project_id TYPE VARCHAR(100);');
+        } catch (e) { }
+
+        console.log('✅ Payments Database: READY');
     } catch (e) {
         console.error('❌ Payments DB Init Error:', e.message);
     }
 };
 initDB();
+
+// Fetch transactions for a project
+app.get('/transactions', async (req, res) => {
+    try {
+        const projectId = req.headers['x-project-id'];
+        if (!projectId) return res.status(400).json({ error: "Missing x-project-id header" });
+
+        const result = await pool.query(
+            'SELECT * FROM transactions WHERE project_id = $1 ORDER BY created_at DESC LIMIT 100',
+            [projectId]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        console.error('[PAYMENTS] GET Transactions Error:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // Helper for generating IDs
 const generateId = (prefix) => `${prefix}_${Math.random().toString(36).substring(2, 10)}`;

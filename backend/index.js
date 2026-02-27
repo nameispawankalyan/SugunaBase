@@ -91,11 +91,29 @@ app.use('/functions', createProxyMiddleware({
 }));
 
 // 2. Payments Proxy (Supports SSL and dynamic routing)
+// WEBHOOKS FIRST (So they don't hit the project-id proxy)
+app.post('/v1/payments/webhooks/:gateway', createProxyMiddleware({
+    target: 'http://127.0.0.1:3800',
+    pathRewrite: (path) => {
+        const parts = path.split('/');
+        const gateway = parts[parts.length - 1];
+        return `/webhook/${gateway}`;
+    },
+    changeOrigin: true
+}));
+
+// GENERAL PAYMENTS API
 app.use('/v1/payments/:projectId', authenticateToken, resolveProject, createProxyMiddleware({
     target: 'http://127.0.0.1:3800',
-    pathRewrite: (path, req) => {
-        const parts = path.split('/');
-        return '/' + parts.slice(4).join('/');
+    // No pathRewrite needed! Express mounting already stripped the prefix.
+    // Except we need to ensure x-project-id is passed.
+    on: {
+        proxyReq: (proxyReq, req, res) => {
+            // Ensure headers set by resolveProject are passed
+            if (req.headers['x-project-id']) {
+                proxyReq.setHeader('x-project-id', req.headers['x-project-id']);
+            }
+        }
     },
     changeOrigin: true
 }));
@@ -535,7 +553,8 @@ const updateFunctionSchedule = async (projectId, funcName, cronString) => {
 };
 
 initDB();
-initSchedules();
+// initSchedules is called inside initDB when done.
+
 
 // ====================================================
 // AUTH PROXY (suguna-auth: 3300)
