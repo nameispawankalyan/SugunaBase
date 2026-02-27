@@ -18,12 +18,14 @@ const pool = new Pool({
 
 const initDB = async () => {
     try {
-        // Drop and Recreate to fix the Foreign Key mismatch (from Integer to Slug)
-        // Only doing this once to ensure schema is clean
-        console.log('🔄 Cleaning up payments schema...');
+        console.log('🔄 Cleaning up and recreating payments schema...');
+
+        // Force drop to ensure the incorrect foreign key constraint is gone
+        await pool.query(`DROP TABLE IF EXISTS transactions CASCADE;`);
+        await pool.query(`DROP TABLE IF EXISTS project_payments_config CASCADE;`);
 
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS project_payments_config (
+            CREATE TABLE project_payments_config (
                 id SERIAL PRIMARY KEY,
                 project_id VARCHAR(100) NOT NULL,
                 gateway VARCHAR(50) NOT NULL,
@@ -38,7 +40,7 @@ const initDB = async () => {
         `);
 
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS transactions (
+            CREATE TABLE transactions (
                 id VARCHAR(100) PRIMARY KEY,
                 project_id VARCHAR(100) NOT NULL,
                 app_user_id VARCHAR(100), 
@@ -53,7 +55,7 @@ const initDB = async () => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Payments Database Fully Synced & Migrated to Slugs');
+        console.log('✅ Payments Database Fully Synced & Migrated');
     } catch (e) {
         console.error('❌ Payments DB Init Error:', e.message);
     }
