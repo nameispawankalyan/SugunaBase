@@ -102,14 +102,31 @@ app.post('/v1/payments/webhooks/:gateway', createProxyMiddleware({
     changeOrigin: true
 }));
 
-// GENERAL PAYMENTS API
+// SDK PAYMENTS (Public/App Access via x-project-id header)
+app.get('/v1/payments/gateways', createProxyMiddleware({
+    target: 'http://127.0.0.1:3800',
+    pathRewrite: { '^/v1/payments': '' },
+    changeOrigin: true
+}));
+
+app.post('/v1/payments/orders/create', createProxyMiddleware({
+    target: 'http://127.0.0.1:3800',
+    pathRewrite: { '^/v1/payments': '' },
+    changeOrigin: true
+}));
+
+app.post('/v1/payments/verify/google-play', createProxyMiddleware({
+    target: 'http://127.0.0.1:3800',
+    pathRewrite: { '^/v1/payments': '' },
+    changeOrigin: true
+}));
+
+// GENERAL PAYMENTS API (Console/Management)
 app.use('/v1/payments/:projectId', authenticateToken, resolveProject, createProxyMiddleware({
     target: 'http://127.0.0.1:3800',
     // No pathRewrite needed! Express mounting already stripped the prefix.
-    // Except we need to ensure x-project-id is passed.
     on: {
         proxyReq: (proxyReq, req, res) => {
-            // Ensure headers set by resolveProject are passed
             if (req.headers['x-project-id']) {
                 proxyReq.setHeader('x-project-id', req.headers['x-project-id']);
             }
