@@ -254,6 +254,29 @@ app.post('/orders/create', async (req, res) => {
 // -----------------------------------------------------
 // HOSTED CHECKOUT PAGE (For Mobile SDK WebViews)
 // -----------------------------------------------------
+// Route to get a direct UPI Intent link for a specific app
+app.get('/v1/payments/upi-link/:projectId/:orderId', async (req, res) => {
+    try {
+        const { projectId, orderId } = req.params;
+        const config = await getGatewayConfig(projectId, 'razorpay');
+
+        if (!config) return res.status(404).json({ error: 'Razorpay not configured' });
+
+        const instance = new Razorpay({
+            key_id: config.keyId,
+            key_secret: config.keySecret
+        });
+
+        // Razorpay custom payment link or specific intent logic
+        // For standard orders, we can use the 'v1/payments/create' with method=upi
+        res.json({
+            upi_link: `upi://pay?pa=${config.upiId || 'suguna@upi'}&pn=SugunaBase&am=1.00&tr=${orderId}&cu=INR`
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/checkout/razorpay/:projectId/:orderId', async (req, res) => {
     const { projectId, orderId } = req.params;
     try {
