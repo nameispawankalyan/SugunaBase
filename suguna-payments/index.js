@@ -16,6 +16,45 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
 });
 
+const initDB = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS project_payments_config (
+                id SERIAL PRIMARY KEY,
+                project_id VARCHAR(100) NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                gateway VARCHAR(50) NOT NULL,
+                api_key TEXT,
+                api_secret TEXT,
+                webhook_url TEXT,
+                webhook_secret TEXT,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, gateway)
+            );
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS transactions (
+                id VARCHAR(100) PRIMARY KEY,
+                project_id VARCHAR(100) NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                app_user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+                order_id VARCHAR(255),
+                amount NUMERIC(10, 2) NOT NULL,
+                currency VARCHAR(10) NOT NULL,
+                item_type VARCHAR(50),
+                quantity INTEGER,
+                gateway VARCHAR(50) NOT NULL,
+                status VARCHAR(20) DEFAULT 'PENDING',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log('✅ Payments Database Initialized');
+    } catch (e) {
+        console.error('❌ Payments DB Init Error:', e.message);
+    }
+};
+initDB();
+
 // Helper for generating IDs
 const generateId = (prefix) => `${prefix}_${Math.random().toString(36).substring(2, 10)}`;
 
