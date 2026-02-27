@@ -208,26 +208,49 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">API Key / Client ID</label>
-                                <input
-                                    type="text"
-                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-mono text-sm"
-                                    value={formData.api_key}
-                                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                                    placeholder={`Enter ${showConfigModal} Key`}
-                                />
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                    {showConfigModal === 'google_play' ? 'Service Account JSON' : 'API Key / Client ID'}
+                                </label>
+                                {showConfigModal === 'google_play' ? (
+                                    <textarea
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-mono text-sm"
+                                        rows={8}
+                                        value={formData.api_key}
+                                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                                        placeholder="Paste your Google Service Account .json content here..."
+                                    />
+                                ) : (
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-mono text-sm"
+                                        value={formData.api_key}
+                                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                                        placeholder={`Enter ${showConfigModal} Key`}
+                                    />
+                                )}
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">API Secret</label>
-                                <input
-                                    type="password"
-                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-mono text-sm"
-                                    value={formData.api_secret}
-                                    onChange={(e) => setFormData({ ...formData, api_secret: e.target.value })}
-                                    placeholder="Enter Secret"
-                                />
-                            </div>
+                            {showConfigModal !== 'google_play' && (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">API Secret</label>
+                                    <input
+                                        type="password"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-mono text-sm"
+                                        value={formData.api_secret}
+                                        onChange={(e) => setFormData({ ...formData, api_secret: e.target.value })}
+                                        placeholder="Enter Secret"
+                                    />
+                                </div>
+                            )}
+
+                            {showConfigModal === 'google_play' && (
+                                <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex gap-3">
+                                    <Shield className="h-5 w-5 text-amber-600 shrink-0" />
+                                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                                        For Google Play, you need to create a <b>Service Account</b> in the Google Cloud Console with the <b>Google Play Android Developer</b> role, then generate a JSON key and paste its content above.
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="pt-4 border-t border-gray-100">
                                 <div className="flex items-center gap-2 mb-4">
