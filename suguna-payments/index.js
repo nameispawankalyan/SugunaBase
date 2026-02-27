@@ -99,33 +99,60 @@ app.get('/products', async (req, res) => {
     }
 });
 
-app.post('/products', async (req, res) => {
+// -----------------------------------------------------
+// PRODUCTS ENDPOINTS (With Auto-Discovery Logic)
+// -----------------------------------------------------
+
+app.get('/products/active', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
-        const { gateway, product_id, name, description, amount, currency } = req.body;
 
-        await pool.query(`
-            INSERT INTO products(project_id, gateway, product_id, name, description, amount, currency)
-        VALUES($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT(project_id, gateway, product_id) DO UPDATE 
-            SET name = EXCLUDED.name,
-            description = EXCLUDED.description,
-            amount = EXCLUDED.amount,
-            currency = EXCLUDED.currency
-                `, [projectId, gateway, product_id, name, description, amount, currency]);
+        // Return summary of products ordered by frequency - this is "Auto-Discovery"
+        const result = await pool.query(`
+            SELECT item_type as product_id, gateway, COUNT(*) as total_sales, SUM(amount) as total_revenue, MAX(created_at) as last_sold
+            FROM transactions 
+            WHERE project_id = $1 AND status = 'SUCCESS'
+            GROUP BY item_type, gateway
+            ORDER BY total_sales DESC
+        `, [projectId]);
 
-        res.json({ success: true });
+        res.json(result.rows);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.delete('/products/:id', async (req, res) => {
+// Verification Endpoint for Android SDK
+app.post('/verify/google-play', async (req, res) => {
+    const { purchaseToken, productId, userId } = req.body;
+    const projectId = req.headers['x-project-id'];
+
     try {
-        const projectId = req.headers['x-project-id'];
-        await pool.query('DELETE FROM products WHERE id = $1 AND project_id = $2', [req.params.id, projectId]);
-        res.json({ success: true });
+        console.log(`[PAYMENTS] Verifying Google Play Purchase: ${productId} for user ${userId}`);
+
+        // 1. Get Google Config
+        const config = await getProjectGatewayConfig(projectId, 'google_play');
+        const serviceAccount = JSON.parse(config.api_key); // Current UI stores JSON in api_key
+
+        // 2. Simulate Success for now (Later use googleapis)
+        const txnId = `GP_${Date.now()}`;
+
+        await pool.query(`
+            INSERT INTO transactions (id, project_id, app_user_id, item_type, amount, currency, gateway, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [txnId, projectId, userId, productId, 0, 'INR', 'google_play', 'SUCCESS']);
+
+        // 3. Notify Developer Webhook
+        await triggerDeveloperWebhook(projectId, 'payment.success', {
+            user_id: userId,
+            product_id: productId,
+            transaction_id: txnId,
+            gateway: 'google_play'
+        });
+
+        res.json({ success: true, transaction_id: txnId });
     } catch (e) {
+        console.error('[PAYMENTS] Google Verification Error:', e.message);
         res.status(500).json({ error: e.message });
     }
 });

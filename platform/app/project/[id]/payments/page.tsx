@@ -55,7 +55,7 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
 
     const fetchProducts = async () => {
         try {
-            const data = await api.get(`/payments/${id}/products`);
+            const data = await api.get(`/payments/${id}/products/active`);
             setProducts(data || []);
         } catch (e) {
             console.error("Failed to fetch products", e);
@@ -245,13 +245,16 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
             {activeTab === 'products' && (
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-bold text-gray-900">Product List (SKUs)</h3>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-900">Detected Products / SKUs</h3>
+                            <p className="text-xs text-gray-500">Automatically detected from your app's transaction history.</p>
+                        </div>
                         <button
-                            onClick={() => setShowProductModal(true)}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-colors"
+                            onClick={() => fetchProducts()}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Refresh List"
                         >
-                            <Zap className="h-4 w-4" />
-                            Add Product
+                            <RefreshCw className="h-5 w-5" />
                         </button>
                     </div>
 
@@ -259,31 +262,29 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Product ID / SKU</th>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">SKU / Product ID</th>
                                     <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Gateway</th>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Price</th>
-                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Total Sales</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Revenue</th>
+                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Last Sold</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {products.length === 0 ? (
                                     <tr>
                                         <td colSpan={5} className="px-6 py-12 text-center text-gray-500 italic text-sm">
-                                            No products registered yet. Add your Google Play or Razorpay products.
+                                            No products detected yet. SKUs will appear here automatically after the first successful purchase.
                                         </td>
                                     </tr>
                                 ) : (
                                     products.map(p => (
-                                        <tr key={p.id} className="hover:bg-gray-50">
+                                        <tr key={`${p.product_id}-${p.gateway}`} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 text-sm font-mono text-blue-600 font-bold">{p.product_id}</td>
-                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{p.name}</td>
                                             <td className="px-6 py-4 text-sm text-gray-500 capitalize">{p.gateway.replace('_', ' ')}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-900 font-bold">{p.currency} {p.amount}</td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button onClick={() => handleDeleteProduct(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
-                                                    <X className="h-4 w-4" />
-                                                </button>
+                                            <td className="px-6 py-4 text-sm text-gray-900 font-bold">{p.total_sales}</td>
+                                            <td className="px-6 py-4 text-sm text-green-600 font-bold">₹ {p.total_revenue}</td>
+                                            <td className="px-6 py-4 text-right text-xs text-gray-400">
+                                                {new Date(p.last_sold).toLocaleDateString()}
                                             </td>
                                         </tr>
                                     ))
