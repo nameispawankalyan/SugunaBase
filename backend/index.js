@@ -106,19 +106,22 @@ app.post('/webhook/payments/:gateway', createProxyMiddleware({
 app.get('/v1/payments/gateways', createProxyMiddleware({
     target: 'http://127.0.0.1:3800',
     pathRewrite: { '^/v1/payments': '' },
-    changeOrigin: true
+    changeOrigin: true,
+    xfwd: true
 }));
 
 app.post('/v1/payments/orders/create', createProxyMiddleware({
     target: 'http://127.0.0.1:3800',
     pathRewrite: { '^/v1/payments': '' },
-    changeOrigin: true
+    changeOrigin: true,
+    xfwd: true
 }));
 
 app.post('/v1/payments/verify/google-play', createProxyMiddleware({
     target: 'http://127.0.0.1:3800',
     pathRewrite: { '^/v1/payments': '' },
-    changeOrigin: true
+    changeOrigin: true,
+    xfwd: true
 }));
 
 app.get('/v1/payments/checkout/:gateway/:projectId/:orderId', createProxyMiddleware({
@@ -130,7 +133,8 @@ app.get('/v1/payments/checkout/:gateway/:projectId/:orderId', createProxyMiddlew
         const gateway = parts.pop();
         return `/checkout/${gateway}/${projectId}/${orderId}`;
     },
-    changeOrigin: true
+    changeOrigin: true,
+    xfwd: true
 }));
 
 // GENERAL PAYMENTS API (Console/Management)
