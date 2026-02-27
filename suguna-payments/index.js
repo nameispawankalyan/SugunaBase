@@ -270,9 +270,12 @@ app.post('/orders/create', async (req, res) => {
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             `, [txnId, projectId, app_user_id, cfOrder.order_id, amount, currency || 'INR', 'cashfree', 'PENDING']);
 
+            const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+            const host = req.headers['x-forwarded-host'] || req.get('host');
+
             res.json({
                 order_id: cfOrder.order_id,
-                payment_url: `${req.protocol}://${req.get('host')}/v1/payments/checkout/cashfree/${projectId}/${cfOrder.payment_session_id}`,
+                payment_url: `${protocol}://${host}/v1/payments/checkout/cashfree/${projectId}/${cfOrder.payment_session_id}`,
                 payment_session_id: cfOrder.payment_session_id,
                 amount: amount,
                 currency: currency || 'INR',
