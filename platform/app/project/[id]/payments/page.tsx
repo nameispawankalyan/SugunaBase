@@ -1,12 +1,12 @@
 'use client';
 
 import { use, useState, useEffect } from 'react';
-import { CreditCard, History, Settings, Shield, Zap, RefreshCw, Check, X, Search, MoreVertical, DollarSign } from 'lucide-react';
+import { CreditCard, History, Settings, Shield, Zap, RefreshCw, Check, X, Search, MoreVertical, DollarSign, Globe } from 'lucide-react';
 import { api } from '@/utils/api';
 
 export default function PaymentsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const [activeTab, setActiveTab] = useState<'methods' | 'transactions'>('methods');
+    const [activeTab, setActiveTab] = useState<'transactions' | 'methods'>('transactions');
     const [loading, setLoading] = useState(true);
     const [configs, setConfigs] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -95,16 +95,16 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
 
                 <div className="flex gap-8 mt-8 border-b border-gray-100">
                     <div
-                        onClick={() => setActiveTab('methods')}
-                        className={`pb-3 text-sm font-medium cursor-pointer transition-all ${activeTab === 'methods' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
-                    >
-                        Payment Methods
-                    </div>
-                    <div
                         onClick={() => setActiveTab('transactions')}
                         className={`pb-3 text-sm font-medium cursor-pointer transition-all ${activeTab === 'transactions' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
                     >
                         Transactions
+                    </div>
+                    <div
+                        onClick={() => setActiveTab('methods')}
+                        className={`pb-3 text-sm font-medium cursor-pointer transition-all ${activeTab === 'methods' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                        Payment Methods
                     </div>
                 </div>
             </div>
@@ -217,14 +217,51 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                     <Zap className="h-4 w-4 text-orange-500" />
                                     <h3 className="text-sm font-bold text-gray-900">App Webhook (Critical)</h3>
                                 </div>
-                                <p className="text-xs text-gray-500 mb-3">SugunaBase will send payment notifications to this URL.</p>
-                                <input
-                                    type="text"
-                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm mb-3"
-                                    value={formData.webhook_url}
-                                    onChange={(e) => setFormData({ ...formData, webhook_url: e.target.value })}
-                                    placeholder="https://your-server.com/api/suguna-webhook"
-                                />
+                                <p className="text-xs text-gray-500 mb-3">
+                                    SugunaBase will send payment notifications to this URL.
+                                </p>
+
+                                <div className="space-y-4">
+                                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                        <Globe className="w-4 h-4 text-blue-500" />
+                                        SugunaBase Webhook Endpoint (Copy to {showConfigModal === 'razorpay' ? 'Razorpay' : showConfigModal === 'cashfree' ? 'Cashfree' : 'Google Play'} Console)
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            readOnly
+                                            value={`https://api.suguna.co/v1/payments/webhooks/${showConfigModal}`}
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-700 text-sm font-mono"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(`https://api.suguna.co/v1/payments/webhooks/${showConfigModal}`);
+                                                alert("Webhook URL Copied!");
+                                            }}
+                                            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl text-xs text-white font-bold"
+                                        >
+                                            Copy
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 mt-4">
+                                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                        <Zap className="w-4 h-4 text-orange-500" />
+                                        Your Server Webhook (Target)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="https://your-server.com/api/suguna-webhook"
+                                        value={formData.webhook_url}
+                                        onChange={(e) => setFormData({ ...formData, webhook_url: e.target.value })}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Where SugunaBase should notify your backend after successful payment.
+                                    </p>
+                                </div>
+
                                 <input
                                     type="text"
                                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
