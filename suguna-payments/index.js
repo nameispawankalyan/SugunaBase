@@ -268,7 +268,7 @@ app.post('/orders/create', async (req, res) => {
             await pool.query(`
                 INSERT INTO transactions (id, project_id, app_user_id, order_id, amount, currency, gateway, status)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [txnId, projectId, app_user_id, cfOrder.order_id, amount, currency || 'INR', 'cashfree', 'PENDING']);
+            `, [txnId, projectId, app_user_id, cfOrder.payment_session_id, amount, currency || 'INR', 'cashfree', 'PENDING']);
 
             const protocol = req.headers['x-forwarded-proto'] || req.protocol;
             const host = req.headers['x-forwarded-host'] || req.get('host');
@@ -381,34 +381,44 @@ app.get('/checkout/razorpay/:projectId/:orderId', async (req, res) => {
 });
 
 app.get('/checkout/cashfree/:projectId/:orderId', async (req, res) => {
-    const { projectId, orderId } = req.params;
+    const { projectId, orderId } = req.params; // orderId here is the payment_session_id
     try {
         const txnRes = await pool.query('SELECT * FROM transactions WHERE order_id = $1 AND project_id = $2', [orderId, projectId]);
-        if (txnRes.rows.length === 0) return res.send("Transaction not found");
+        if (txnRes.rows.length === 0) return res.send("Transaction not found. Please try again.");
         const txn = txnRes.rows[0];
 
-        // Cashfree uses the session ID stored in the database for the transaction
-        // Actually, we store order_id in transactions table.
-        // For Cashfree, we need to fetch the session ID if we didn't store it.
-        // Wait, I should have returned it in /orders/create.
+        // Get config to check if it's sandbox
+        const config = await getProjectGatewayConfig(projectId, 'cashfree');
+        const isSandbox = config.api_secret && (config.api_secret.includes('test') || config.api_secret.includes('sandbox'));
 
-        // Simpler: Just redirect to Cashfree's hosted checkout if we have the session ID
-        // But we need the session ID here. Let's assume we can fetch it or it's the orderId for now (it's not).
-
-        // Revision: Let's just make /orders/create return a URL that points here.
         res.send(`
             <!DOCTYPE html>
             <html>
             <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Cashfree Checkout</title>
+                <style>
+                    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; }
+                    .loader { border: 4px solid #f3f3f3; border-top: 4px solid #ef4444; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; }
+                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    p { margin-top: 20px; color: #64748b; font-size: 14px; }
+                </style>
                 <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
             </head>
             <body>
-                <p>Redirecting to Cashfree...</p>
+                <div class="loader"></div>
+                <p>Opening Secure Payment Window...</p>
                 <script>
-                    const cashfree = Cashfree({ mode: "sandbox" }); // Dynamically set this later
-                    cashfree.checkout({ paymentSessionId: "${orderId}" }); // In our CF implementation, orderId returned to SDK is the session ID or we need to pass it
+                    const cashfree = Cashfree({ mode: "${isSandbox ? 'sandbox' : 'production'}" });
+                    cashfree.checkout({ 
+                        paymentSessionId: "${orderId}",
+                        redirectTarget: "_self"
+                    }).then((result) => {
+                        if (result.error) {
+                            alert(result.error.message);
+                            window.location.href = "sugunabase://payment/cancel";
+                        }
+                    });
                 </script>
             </body>
             </html>
