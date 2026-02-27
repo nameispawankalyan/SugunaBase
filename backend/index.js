@@ -38,37 +38,17 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
-
-// ====================================================
-// CLOUD FUNCTIONS PROXY (Bypass Nginx Cache Issues)
-// ====================================================
-const { createProxyMiddleware } = require('http-proxy-middleware');
-app.use('/functions', createProxyMiddleware({
-    target: 'http://127.0.0.1:3005',
-    changeOrigin: true,
-    pathRewrite: {
-        '^/functions': '', // Strip /functions so 3005 receives /login
-    }
-}));
-// ====================================================
-
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
 });
 
-// Auth Middleware
+// Middleware Definitions (Move up so Proxies can use them)
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-
     if (!token) return res.status(401).json({ error: "Access Denied" });
-
     jwt.verify(token, JWT_SECRET, async (err, decoded) => {
         if (err) return res.status(403).json({ error: "Invalid Token" });
-
-        // Check if user is still active in DB and get role
         try {
             const check = await pool.query('SELECT role, is_active FROM users WHERE id = $1', [decoded.id]);
             if (check.rows.length === 0 || !check.rows[0].is_active) {
@@ -82,6 +62,48 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+const resolveProject = async (req, res, next) => {
+    let projectIdRaw = req.params.projectId || req.params.id || (req.body && req.body.project_id) || req.headers['x-project-id'];
+    if (!projectIdRaw) return next();
+    try {
+        const isNumeric = /^\d+$/.test(String(projectIdRaw));
+        const query = isNumeric
+            ? `SELECT * FROM projects WHERE id = $1`
+            : `SELECT * FROM projects WHERE project_id = $1`;
+        const result = await pool.query(query, [projectIdRaw]);
+        if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+        req.project = result.rows[0];
+        req.headers['x-project-id'] = req.project.project_id;
+        next();
+    } catch (e) { next(); }
+};
+
+// ====================================================
+// PROXIES (BEFORE express.json())
+// ====================================================
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+// 1. Cloud Functions Proxy
+app.use('/functions', createProxyMiddleware({
+    target: 'http://127.0.0.1:3005',
+    changeOrigin: true,
+    pathRewrite: { '^/functions': '' }
+}));
+
+// 2. Payments Proxy (Supports SSL and dynamic routing)
+app.use('/v1/payments/:projectId', authenticateToken, resolveProject, createProxyMiddleware({
+    target: 'http://127.0.0.1:3800',
+    pathRewrite: (path, req) => {
+        const parts = path.split('/');
+        return '/' + parts.slice(4).join('/');
+    },
+    changeOrigin: true
+}));
+
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+// Auth Middleware
 const authenticateAppToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -93,57 +115,6 @@ const authenticateAppToken = (req, res, next) => {
         req.app_user = user;
         next();
     });
-};
-
-// Middleware to check if a project is active
-// Middleware to resolve Project ID (Slug -> Numeric) and check if active
-// Middleware to resolve Project ID (Slug -> Numeric) and check if active + Ownership Security
-const resolveProject = async (req, res, next) => {
-    let projectIdRaw = req.params.projectId || req.params.id || (req.body && req.body.project_id) || req.headers['x-project-id'] || (req.app_user && req.app_user.project_id);
-    if (!projectIdRaw) return next();
-
-    try {
-        const isNumeric = /^\d+$/.test(String(projectIdRaw));
-        const query = isNumeric
-            ? `SELECT p.*, (SELECT ARRAY_AGG(DISTINCT platform) FROM project_apps WHERE project_id = p.id) as platforms FROM projects p WHERE p.id = $1`
-            : `SELECT p.*, (SELECT ARRAY_AGG(DISTINCT platform) FROM project_apps WHERE project_id = p.id) as platforms FROM projects p WHERE p.project_id = $1`;
-
-        const result = await pool.query(query, [projectIdRaw]);
-
-        if (result.rows.length === 0) {
-            console.warn(`[Gateway] Project not found for: ${projectIdRaw}`);
-            return res.status(404).json({ error: "Project not found" });
-        }
-
-        const project = result.rows[0];
-
-        if (!project.is_active) {
-            return res.status(403).json({ error: "This project has been deactivated by the administrator." });
-        }
-
-        if (req.user) {
-            if (project.user_id !== req.user.id && req.user.role !== 'admin') {
-                return res.status(403).json({ error: "Access Denied: Unauthorized project access." });
-            }
-        }
-
-        const actualId = project.id.toString();
-        const slugId = project.project_id;
-
-        req.project = project;
-
-        // Overwrite req.params with the NUMERIC ID for Gateway SQL queries
-        if (req.params.projectId) req.params.projectId = actualId;
-        if (req.params.id) req.params.id = actualId;
-
-        // Pass the SLUG (string ID) to microservices via header
-        req.headers['x-project-id'] = slugId;
-
-        next();
-    } catch (e) {
-        console.error("[Gateway] Project Resolution Error:", e.message);
-        next();
-    }
 };
 
 const initDB = async () => {
@@ -531,35 +502,6 @@ const runScheduledFunction = async (projectId, funcName) => {
 };
 
 const initSchedules = async () => {
-    // ====================================================
-    // PAYMENTS PROXY (suguna-payments: 3800)
-    // ====================================================
-    app.use('/v1/payments/:projectId', authenticateToken, resolveProject, (req, res, next) => {
-        req.headers['x-project-id'] = req.project.project_id;
-        next();
-    }, createProxyMiddleware({
-        target: 'http://127.0.0.1:3800',
-        pathRewrite: (path, req) => {
-            const parts = path.split('/');
-            // /v1/payments/:projectId/config -> /config
-            return '/' + parts.slice(4).join('/');
-        },
-        changeOrigin: true
-    }));
-    // App payments endpoints directly
-    app.get('/v1/payments/app/gateways', resolveProject, (req, res) => {
-        axios.get('http://127.0.0.1:3800/gateways', { headers: { 'x-project-id': req.project.project_id } })
-            .then(r => res.json(r.data))
-            .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
-    });
-    app.post('/v1/payments/app/create-order', resolveProject, (req, res) => {
-        req.body.project_id = req.project.project_id;
-        axios.post('http://127.0.0.1:3800/create-order', req.body)
-            .then(r => res.json(r.data))
-            .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
-    });
-    // ====================================================
-
     try {
         const res = await pool.query("SELECT * FROM functions_deployments WHERE trigger_type = 'schedule' AND trigger_value IS NOT NULL");
         res.rows.forEach(fn => {
@@ -593,6 +535,7 @@ const updateFunctionSchedule = async (projectId, funcName, cronString) => {
 };
 
 initDB();
+initSchedules();
 
 // ====================================================
 // AUTH PROXY (suguna-auth: 3300)
