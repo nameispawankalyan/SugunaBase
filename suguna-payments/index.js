@@ -132,12 +132,14 @@ async function triggerDeveloperWebhook(projectId, event, data) {
 app.get('/config', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
+        console.log(`[PAYMENTS] Fetching config for Project: ${projectId}`);
         const result = await pool.query(
             'SELECT gateway, api_key, api_secret, webhook_url, webhook_secret, is_enabled FROM project_payments_config WHERE project_id = $1',
             [projectId]
         );
         res.json(result.rows);
     } catch (e) {
+        console.error('[PAYMENTS] GET Config Error:', e.message);
         res.status(500).json({ error: e.message });
     }
 });
@@ -146,6 +148,13 @@ app.post('/config', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
         const { gateway, api_key, api_secret, webhook_url, webhook_secret, is_enabled } = req.body;
+
+        console.log(`[PAYMENTS] Saving config for Project: ${projectId}, Gateway: ${gateway}`);
+
+        if (!projectId) {
+            console.error('[PAYMENTS] Error: x-project-id header is missing!');
+            return res.status(400).json({ error: "Missing x-project-id header" });
+        }
 
         await pool.query(`
             INSERT INTO project_payments_config (project_id, gateway, api_key, api_secret, webhook_url, webhook_secret, is_enabled)
@@ -158,8 +167,10 @@ app.post('/config', async (req, res) => {
                 is_enabled = EXCLUDED.is_enabled
         `, [projectId, gateway, api_key, api_secret, webhook_url, webhook_secret, is_enabled]);
 
+        console.log(`✅ [PAYMENTS] Config saved successfully for ${projectId}`);
         res.json({ success: true, message: 'Configuration saved.' });
     } catch (e) {
+        console.error('[PAYMENTS] POST Config Error:', e.message);
         res.status(500).json({ error: e.message });
     }
 });
