@@ -532,14 +532,18 @@ const runScheduledFunction = async (projectId, funcName) => {
 
 const initSchedules = async () => {
     // ====================================================
-    // PAYMENTS PROXY (suguna-payments: 3600)
+    // PAYMENTS PROXY (suguna-payments: 3800)
     // ====================================================
-    app.use('/v1/payments', authenticateToken, resolveProject, (req, res, next) => {
+    app.use('/v1/payments/:projectId', authenticateToken, resolveProject, (req, res, next) => {
         req.headers['x-project-id'] = req.project.project_id;
         next();
     }, createProxyMiddleware({
         target: 'http://127.0.0.1:3800',
-        pathRewrite: { '^/v1/payments': '/' },
+        pathRewrite: (path, req) => {
+            const parts = path.split('/');
+            // /v1/payments/:projectId/config -> /config
+            return '/' + parts.slice(4).join('/');
+        },
         changeOrigin: true
     }));
     // App payments endpoints directly

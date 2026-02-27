@@ -25,7 +25,7 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
     const fetchConfigs = async () => {
         setLoading(true);
         try {
-            const data = await api.get(`/payments/config`);
+            const data = await api.get(`/payments/${id}/config`);
             setConfigs(data || []);
         } catch (e) {
             console.error("Failed to fetch configs", e);
@@ -65,7 +65,7 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
         if (!showConfigModal) return;
         setIsSaving(true);
         try {
-            await api.post(`/payments/config`, {
+            await api.post(`/payments/${id}/config`, {
                 gateway: showConfigModal,
                 ...formData
             });
