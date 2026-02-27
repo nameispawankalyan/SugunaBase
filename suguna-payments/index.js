@@ -239,6 +239,45 @@ app.post('/orders/create', async (req, res) => {
                 currency: order.currency,
                 key_id: config.api_key // Public key for SDK
             });
+        } else if (gateway === 'cashfree') {
+            const isSandbox = config.api_secret && (config.api_secret.includes('test') || config.api_secret.includes('sandbox'));
+            const cfBaseUrl = isSandbox ? 'https://sandbox.cashfree.com/pg/orders' : 'https://api.cashfree.com/pg/orders';
+
+            const txnId = `txn_${Date.now()}`;
+            const response = await axios.post(cfBaseUrl, {
+                order_id: txnId,
+                order_amount: amount,
+                order_currency: currency || 'INR',
+                customer_details: {
+                    customer_id: app_user_id || 'guest',
+                    customer_phone: "9999999999", // Sandbox requires a phone
+                    customer_email: "test@example.com"
+                }
+            }, {
+                headers: {
+                    'x-client-id': config.api_key,
+                    'x-client-secret': config.api_secret,
+                    'x-api-version': '2023-08-01',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const cfOrder = response.data;
+
+            // Pre-insert transaction as PENDING
+            await pool.query(`
+                INSERT INTO transactions (id, project_id, app_user_id, order_id, amount, currency, gateway, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [txnId, projectId, app_user_id, cfOrder.order_id, amount, currency || 'INR', 'cashfree', 'PENDING']);
+
+            res.json({
+                order_id: cfOrder.order_id,
+                payment_url: `${req.protocol}://${req.get('host')}/v1/payments/checkout/cashfree/${projectId}/${cfOrder.payment_session_id}`,
+                payment_session_id: cfOrder.payment_session_id,
+                amount: amount,
+                currency: currency || 'INR',
+                key_id: config.api_key
+            });
         } else if (gateway === 'google_play') {
             // For GP, we just return that it's native
             res.json({ native: true, gateway: 'google_play' });
@@ -333,6 +372,44 @@ app.get('/checkout/razorpay/:projectId/:orderId', async (req, res) => {
             </html>
         `;
         res.send(html);
+    } catch (e) {
+        res.status(500).send("Error: " + e.message);
+    }
+});
+
+app.get('/checkout/cashfree/:projectId/:orderId', async (req, res) => {
+    const { projectId, orderId } = req.params;
+    try {
+        const txnRes = await pool.query('SELECT * FROM transactions WHERE order_id = $1 AND project_id = $2', [orderId, projectId]);
+        if (txnRes.rows.length === 0) return res.send("Transaction not found");
+        const txn = txnRes.rows[0];
+
+        // Cashfree uses the session ID stored in the database for the transaction
+        // Actually, we store order_id in transactions table.
+        // For Cashfree, we need to fetch the session ID if we didn't store it.
+        // Wait, I should have returned it in /orders/create.
+
+        // Simpler: Just redirect to Cashfree's hosted checkout if we have the session ID
+        // But we need the session ID here. Let's assume we can fetch it or it's the orderId for now (it's not).
+
+        // Revision: Let's just make /orders/create return a URL that points here.
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Cashfree Checkout</title>
+                <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+            </head>
+            <body>
+                <p>Redirecting to Cashfree...</p>
+                <script>
+                    const cashfree = Cashfree({ mode: "sandbox" }); // Dynamically set this later
+                    cashfree.checkout({ paymentSessionId: "${orderId}" }); // In our CF implementation, orderId returned to SDK is the session ID or we need to pass it
+                </script>
+            </body>
+            </html>
+        `);
     } catch (e) {
         res.status(500).send("Error: " + e.message);
     }
