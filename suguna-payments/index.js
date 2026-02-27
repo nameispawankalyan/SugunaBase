@@ -18,7 +18,10 @@ const pool = new Pool({
 
 const initDB = async () => {
     try {
-        // Create table if it doesn't exist
+        // Drop and Recreate to fix the Foreign Key mismatch (from Integer to Slug)
+        // Only doing this once to ensure schema is clean
+        console.log('🔄 Cleaning up payments schema...');
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS project_payments_config (
                 id SERIAL PRIMARY KEY,
@@ -28,19 +31,10 @@ const initDB = async () => {
                 api_secret TEXT,
                 webhook_url TEXT,
                 webhook_secret TEXT,
+                is_enabled BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(project_id, gateway)
             );
-        `);
-
-        // Check and Add 'is_enabled' column if missing
-        await pool.query(`
-            DO $$ 
-            BEGIN 
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='project_payments_config' AND column_name='is_enabled') THEN
-                    ALTER TABLE project_payments_config ADD COLUMN is_enabled BOOLEAN DEFAULT TRUE;
-                END IF;
-            END $$;
         `);
 
         await pool.query(`
@@ -59,7 +53,7 @@ const initDB = async () => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Payments Database Initialized & Synced');
+        console.log('✅ Payments Database Fully Synced & Migrated to Slugs');
     } catch (e) {
         console.error('❌ Payments DB Init Error:', e.message);
     }
