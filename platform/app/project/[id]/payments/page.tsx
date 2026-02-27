@@ -6,14 +6,24 @@ import { api } from '@/utils/api';
 
 export default function PaymentsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const [activeTab, setActiveTab] = useState<'transactions' | 'methods'>('transactions');
+    const [activeTab, setActiveTab] = useState<'transactions' | 'methods' | 'products'>('transactions');
     const [loading, setLoading] = useState(true);
     const [configs, setConfigs] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
+    const [products, setProducts] = useState<any[]>([]);
     const [isSaving, setIsSaving] = useState(false);
 
     // Modal States
-    const [showConfigModal, setShowConfigModal] = useState<string | null>(null); // 'razorpay' | 'cashfree' | 'google_play'
+    const [showConfigModal, setShowConfigModal] = useState<string | null>(null);
+    const [showProductModal, setShowProductModal] = useState<boolean>(false);
+    const [productFormData, setProductFormData] = useState({
+        gateway: 'google_play',
+        product_id: '',
+        name: '',
+        description: '',
+        amount: '',
+        currency: 'INR'
+    });
     const [formData, setFormData] = useState({
         api_key: '',
         api_secret: '',
@@ -43,10 +53,20 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
         }
     };
 
+    const fetchProducts = async () => {
+        try {
+            const data = await api.get(`/payments/${id}/products`);
+            setProducts(data || []);
+        } catch (e) {
+            console.error("Failed to fetch products", e);
+        }
+    };
+
     useEffect(() => {
         if (id) {
             fetchConfigs();
             if (activeTab === 'transactions') fetchTransactions();
+            if (activeTab === 'products') fetchProducts();
         }
     }, [id, activeTab]);
 
@@ -79,6 +99,37 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
         }
     };
 
+    const handleSaveProduct = async () => {
+        setIsSaving(true);
+        try {
+            await api.post(`/payments/${id}/products`, productFormData);
+            await fetchProducts();
+            setShowProductModal(false);
+            setProductFormData({
+                gateway: 'google_play',
+                product_id: '',
+                name: '',
+                description: '',
+                amount: '',
+                currency: 'INR'
+            });
+        } catch (err: any) {
+            alert("Error saving product: " + err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeleteProduct = async (productId: number) => {
+        if (!confirm("Are you sure?")) return;
+        try {
+            await api.delete(`/payments/${id}/products/${productId}`);
+            await fetchProducts();
+        } catch (err: any) {
+            alert("Error deleting product");
+        }
+    };
+
     const getGatewayStatus = (gateway: string) => {
         const config = configs.find(c => c.gateway === gateway);
         return config?.is_enabled ? 'Enabled' : 'Disabled';
@@ -106,6 +157,12 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                         className={`pb-3 text-sm font-medium cursor-pointer transition-all ${activeTab === 'methods' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
                     >
                         Payment Methods
+                    </div>
+                    <div
+                        onClick={() => setActiveTab('products')}
+                        className={`pb-3 text-sm font-medium cursor-pointer transition-all ${activeTab === 'products' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                        Products / SKUs
                     </div>
                 </div>
             </div>
@@ -181,6 +238,135 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                 </tbody>
                             </table>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'products' && (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-bold text-gray-900">Product List (SKUs)</h3>
+                        <button
+                            onClick={() => setShowProductModal(true)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-colors"
+                        >
+                            <Zap className="h-4 w-4" />
+                            Add Product
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Product ID / SKU</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Gateway</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Price</th>
+                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {products.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-500 italic text-sm">
+                                            No products registered yet. Add your Google Play or Razorpay products.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    products.map(p => (
+                                        <tr key={p.id} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 text-sm font-mono text-blue-600 font-bold">{p.product_id}</td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{p.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500 capitalize">{p.gateway.replace('_', ' ')}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-900 font-bold">{p.currency} {p.amount}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button onClick={() => handleDeleteProduct(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Product Modal */}
+            {showProductModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-gray-900">Add Product / SKU</h2>
+                            <button onClick={() => setShowProductModal(false)} className="text-gray-400 hover:text-gray-600">
+                                <X className="h-6 w-6" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Target Gateway</label>
+                                <select
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm"
+                                    value={productFormData.gateway}
+                                    onChange={(e) => setProductFormData({ ...productFormData, gateway: e.target.value })}
+                                >
+                                    <option value="google_play">Google Play</option>
+                                    <option value="razorpay">Razorpay</option>
+                                    <option value="cashfree">Cashfree</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Product ID (SKU) from {productFormData.gateway === 'google_play' ? 'Play Console' : 'Gateway'}</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-mono text-sm"
+                                    placeholder="e.g. premium_monthly"
+                                    value={productFormData.product_id}
+                                    onChange={(e) => setProductFormData({ ...productFormData, product_id: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Display Name</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm"
+                                    placeholder="e.g. Monthly Premium"
+                                    value={productFormData.name}
+                                    onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Amount</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-bold text-sm"
+                                        placeholder="0.00"
+                                        value={productFormData.amount}
+                                        onChange={(e) => setProductFormData({ ...productFormData, amount: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Currency</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm"
+                                        placeholder="INR"
+                                        value={productFormData.currency}
+                                        onChange={(e) => setProductFormData({ ...productFormData, currency: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                            <button onClick={() => setShowProductModal(false)} className="px-6 py-2.5 text-sm font-bold text-gray-600">Cancel</button>
+                            <button onClick={handleSaveProduct} disabled={isSaving} className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold flex items-center gap-2">
+                                {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                Add SKU
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
