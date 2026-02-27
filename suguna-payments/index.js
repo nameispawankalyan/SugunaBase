@@ -51,20 +51,23 @@ const initDB = async () => {
                 status VARCHAR(20) DEFAULT 'PENDING',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            await pool.query(`
-            CREATE TABLE IF NOT EXISTS products(
-            id SERIAL PRIMARY KEY,
-            project_id VARCHAR(100) NOT NULL,
-            gateway VARCHAR(50) NOT NULL,
-            product_id VARCHAR(100) NOT NULL,
-            name VARCHAR(255),
-            description TEXT,
-            amount NUMERIC(10, 2),
-            currency VARCHAR(10) DEFAULT 'INR',
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(project_id, gateway, product_id)
-        );
+            );
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                project_id VARCHAR(100) NOT NULL,
+                gateway VARCHAR(50) NOT NULL,
+                product_id VARCHAR(100) NOT NULL,
+                name VARCHAR(255),
+                description TEXT,
+                amount NUMERIC(10, 2),
+                currency VARCHAR(10) DEFAULT 'INR',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, gateway, product_id)
+            );
         `);
 
         // Migration: Ensure project_id is VARCHAR in project_payments_config
@@ -100,7 +103,7 @@ app.post('/products', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
         const { gateway, product_id, name, description, amount, currency } = req.body;
-        
+
         await pool.query(`
             INSERT INTO products(project_id, gateway, product_id, name, description, amount, currency)
         VALUES($1, $2, $3, $4, $5, $6, $7)
@@ -110,7 +113,7 @@ app.post('/products', async (req, res) => {
             amount = EXCLUDED.amount,
             currency = EXCLUDED.currency
                 `, [projectId, gateway, product_id, name, description, amount, currency]);
-        
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -145,7 +148,7 @@ app.get('/transactions', async (req, res) => {
 });
 
 // Helper for generating IDs
-const generateId = (prefix) => `${ prefix }_${ Math.random().toString(36).substring(2, 10) } `;
+const generateId = (prefix) => `${prefix}_${Math.random().toString(36).substring(2, 10)} `;
 
 // -----------------------------------------------------
 // GET CONFIG FOR PROJECT
@@ -155,7 +158,7 @@ async function getProjectGatewayConfig(projectId, gateway) {
         'SELECT * FROM project_payments_config WHERE project_id = $1 AND gateway = $2 AND is_enabled = TRUE',
         [projectId, gateway]
     );
-    if (res.rows.length === 0) throw new Error(`Integration for ${ gateway } not found or disabled for project ${ projectId }`);
+    if (res.rows.length === 0) throw new Error(`Integration for ${gateway} not found or disabled for project ${projectId}`);
     return res.rows[0];
 }
 
@@ -183,7 +186,7 @@ async function triggerDeveloperWebhook(projectId, event, data) {
             [projectId]
         );
         if (res.rows.length === 0 || !res.rows[0].webhook_url) {
-            console.log(`[PAYMENTS] No webhook config for project ${ projectId }.Skipping.`);
+            console.log(`[PAYMENTS] No webhook config for project ${projectId}.Skipping.`);
             return;
         }
 
@@ -200,7 +203,7 @@ async function triggerDeveloperWebhook(projectId, event, data) {
                 'X-Suguna-Signature': signature
             }
         });
-        console.log(`[PAYMENTS] Webhook sent to ${ webhook_url } `);
+        console.log(`[PAYMENTS] Webhook sent to ${webhook_url} `);
     } catch (e) {
         console.error(`[PAYMENTS] Failed to send webhook to developer: `, e.message);
     }
@@ -212,7 +215,7 @@ async function triggerDeveloperWebhook(projectId, event, data) {
 app.get('/config', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
-        console.log(`[PAYMENTS] Fetching config for Project: ${ projectId } `);
+        console.log(`[PAYMENTS] Fetching config for Project: ${projectId} `);
         const result = await pool.query(
             'SELECT gateway, api_key, api_secret, webhook_url, webhook_secret, is_enabled FROM project_payments_config WHERE project_id = $1',
             [projectId]
@@ -229,7 +232,7 @@ app.post('/config', async (req, res) => {
         const projectId = req.headers['x-project-id'];
         const { gateway, api_key, api_secret, webhook_url, webhook_secret, is_enabled } = req.body;
 
-        console.log(`[PAYMENTS] Saving config for Project: ${ projectId }, Gateway: ${ gateway } `);
+        console.log(`[PAYMENTS] Saving config for Project: ${projectId}, Gateway: ${gateway} `);
 
         if (!projectId) {
             console.error('[PAYMENTS] Error: x-project-id header is missing!');
@@ -247,7 +250,7 @@ app.post('/config', async (req, res) => {
             is_enabled = EXCLUDED.is_enabled
                 `, [projectId, gateway, api_key, api_secret, webhook_url, webhook_secret, is_enabled]);
 
-        console.log(`✅[PAYMENTS] Config saved successfully for ${ projectId }`);
+        console.log(`✅[PAYMENTS] Config saved successfully for ${projectId}`);
         res.json({ success: true, message: 'Configuration saved.' });
     } catch (e) {
         console.error('[PAYMENTS] POST Config Error:', e.message);
@@ -285,7 +288,7 @@ app.post('/create-order', async (req, res) => {
                 order_amount: amount,
                 order_currency: currency,
                 customer_details: {
-                    customer_id: `${ app_user_id } `,
+                    customer_id: `${app_user_id} `,
                     customer_phone: "9999999999" // Usually require this
                 }
             }, {
@@ -300,7 +303,7 @@ app.post('/create-order', async (req, res) => {
         }
         else if (gateway === 'google_play') {
             // Google Play generates the order ID on the device. We just return a tracking ID.
-            orderId = `gp_${ txnId } `;
+            orderId = `gp_${txnId} `;
         }
         else {
             return res.status(400).json({ error: 'Unsupported Gateway' });
@@ -384,5 +387,5 @@ app.post('/webhook/google_play', async (req, res) => {
 });
 
 app.listen(port, '127.0.0.1', () => {
-    console.log(`💰 Suguna Payments Microservice running on port ${ port } `);
+    console.log(`💰 Suguna Payments Microservice running on port ${port} `);
 });
