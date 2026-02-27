@@ -121,6 +121,18 @@ app.post('/v1/payments/verify/google-play', createProxyMiddleware({
     changeOrigin: true
 }));
 
+app.get('/v1/payments/checkout/:gateway/:projectId/:orderId', createProxyMiddleware({
+    target: 'http://127.0.0.1:3800',
+    pathRewrite: (path) => {
+        const parts = path.split('/');
+        const orderId = parts.pop();
+        const projectId = parts.pop();
+        const gateway = parts.pop();
+        return `/checkout/${gateway}/${projectId}/${orderId}`;
+    },
+    changeOrigin: true
+}));
+
 // GENERAL PAYMENTS API (Console/Management)
 app.use('/v1/payments/:projectId', authenticateToken, resolveProject, createProxyMiddleware({
     target: 'http://127.0.0.1:3800',

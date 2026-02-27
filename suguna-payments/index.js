@@ -252,6 +252,70 @@ app.post('/orders/create', async (req, res) => {
 });
 
 // -----------------------------------------------------
+// HOSTED CHECKOUT PAGE (For Mobile SDK WebViews)
+// -----------------------------------------------------
+app.get('/checkout/razorpay/:projectId/:orderId', async (req, res) => {
+    const { projectId, orderId } = req.params;
+    try {
+        // 1. Get Transaction Details
+        const txnRes = await pool.query('SELECT * FROM transactions WHERE order_id = $1 AND project_id = $2', [orderId, projectId]);
+        if (txnRes.rows.length === 0) return res.send("Transaction not found");
+        const txn = txnRes.rows[0];
+
+        // 2. Get Gateway Config (for API Key)
+        const config = await getProjectGatewayConfig(projectId, 'razorpay');
+
+        // 3. Render Simple Razorpay HTML
+        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>SugunaBase Checkout</title>
+                <style>
+                    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; }
+                    .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; }
+                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    p { margin-top: 20px; color: #64748b; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class="loader"></div>
+                <p>Redirecting to Secure Payment Gateway...</p>
+                <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+                <script>
+                    var options = {
+                        "key": "${config.api_key}",
+                        "amount": "${Math.round(txn.amount * 100)}",
+                        "currency": "${txn.currency}",
+                        "name": "SugunaBase Payment",
+                        "description": "Payment for ${txn.item_type || 'Order'}",
+                        "order_id": "${orderId}",
+                        "handler": function (response){
+                            // Success is handled by Razorpay Webhooks, we just show a message to close webview
+                            document.body.innerHTML = "<h2 style='color: #22c55e;'>Payment Successful!</h2><p>You can close this window now.</p>";
+                            window.location.href = "sugunabase://payment/success?id=" + response.razorpay_payment_id;
+                        },
+                        "modal": {
+                            "ondismiss": function(){
+                                window.location.href = "sugunabase://payment/cancel";
+                            }
+                        },
+                        "theme": { "color": "#2563eb" }
+                    };
+                    var rzp1 = new Razorpay(options);
+                    rzp1.open();
+                </script>
+            </body>
+            </html>
+        `;
+        res.send(html);
+    } catch (e) {
+        res.status(500).send("Error: " + e.message);
+    }
+});
+
+// -----------------------------------------------------
 // WEBHOOK FIRELINK TO DEVELOPER 'SERVER'
 // -----------------------------------------------------
 async function triggerDeveloperWebhook(projectId, event, data) {
