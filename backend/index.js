@@ -749,7 +749,7 @@ app.get('/v1/console/projects/:projectId/firestore/collections', authenticateTok
     try {
         const result = await pool.query(
             'SELECT DISTINCT collection_name FROM firestore_data WHERE project_id = $1 ORDER BY collection_name',
-            [projectId]
+            [req.project.id]
         );
         res.json(result.rows.map(row => row.collection_name));
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -770,7 +770,7 @@ app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, resolv
         try {
             const result = await pool.query(
                 'SELECT document_id FROM firestore_data WHERE project_id = $1 AND collection_name = $2 ORDER BY document_id',
-                [projectId, collection_name]
+                [req.project.id, collection_name]
             );
             res.json(result.rows.map(row => row.document_id));
         } catch (e) { res.status(500).json({ error: e.message }); }
@@ -783,7 +783,7 @@ app.get('/v1/console/projects/:projectId/firestore/*', authenticateToken, resolv
         try {
             const result = await pool.query(
                 'SELECT data FROM firestore_data WHERE project_id = $1 AND collection_name = $2 AND document_id = $3',
-                [projectId, collection_name, document_id]
+                [req.project.id, collection_name, document_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
             res.json(result.rows[0].data);
@@ -904,21 +904,21 @@ app.get('/v1/internal/projects/:projectId/status', resolveProject, async (req, r
 
 // Get Hosting Sites for a Project
 app.get('/v1/console/projects/:projectId/hosting/sites', authenticateToken, resolveProject, (req, res) => {
-    axios.get(`http://localhost:3600/sites/${req.params.projectId}`)
+    axios.get(`http://localhost:3600/sites/${req.project.id}`)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 // Toggle Hosting Site Status (Active/Inactive)
 app.post('/v1/console/projects/:projectId/hosting/sites/:siteId/toggle', authenticateToken, resolveProject, (req, res) => {
-    axios.post(`http://localhost:3600/sites/${req.params.projectId}/${req.params.siteId}/toggle`, req.body)
+    axios.post(`http://localhost:3600/sites/${req.project.id}/${req.params.siteId}/toggle`, req.body)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 // Delete Hosting Site
 app.delete('/v1/console/projects/:projectId/hosting/sites/:siteId', authenticateToken, resolveProject, (req, res) => {
-    axios.delete(`http://localhost:3600/sites/${req.params.projectId}/${req.params.siteId}`)
+    axios.delete(`http://localhost:3600/sites/${req.project.id}/${req.params.siteId}`)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
@@ -1240,7 +1240,7 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, resolveP
         const userStats = await pool.query(`
             SELECT COUNT(*) as total FROM app_users 
             WHERE project_id = $1 AND created_at::date >= ${startDateSql} AND created_at::date <= ${endDateSql}
-        `, [projectId]);
+        `, [req.project.id]);
 
         // 2. Get User Trend (Last 7 days vs previous 7 days)
         const userTrend = await pool.query(`
@@ -1248,13 +1248,13 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, resolveP
                 COUNT(*) FILTER (WHERE created_at > CURRENT_DATE - INTERVAL '7 days') as this_week,
                 COUNT(*) FILTER (WHERE created_at > CURRENT_DATE - INTERVAL '14 days' AND created_at <= CURRENT_DATE - INTERVAL '7 days') as last_week
             FROM app_users WHERE project_id = $1
-        `, [projectId]);
+        `, [req.project.id]);
 
         // 3. Get Storage Stats (Filtered by range)
         const storageStats = await pool.query(`
             SELECT SUM(file_size) as total_size, COUNT(*) as file_count FROM storage_files 
             WHERE project_id = $1 AND created_at::date >= ${startDateSql} AND created_at::date <= ${endDateSql}
-        `, [projectId]);
+        `, [req.project.id]);
 
         // 4. Get Firestore Stats (With Gap Filling)
         const usageHistory = await pool.query(`
@@ -1271,7 +1271,7 @@ app.get('/v1/console/projects/:projectId/analytics', authenticateToken, resolveP
             FROM GENERATE_SERIES(${startDateSql}, ${endDateSql}, '1 day'::interval) as series_date
             LEFT JOIN project_usage p ON p.date = series_date::date AND p.project_id = $1
             ORDER BY series_date ASC
-        `, [projectId]);
+        `, [req.project.id]);
 
         const thisWeek = parseInt(userTrend.rows[0].this_week || 0);
         const lastWeek = parseInt(userTrend.rows[0].last_week || 0);
@@ -1354,7 +1354,7 @@ app.get('/v1/console/projects/:projectId/functions', authenticateToken, resolveP
             (SELECT COUNT(*) FROM function_logs l WHERE l.project_id = f.project_id AND l.function_name = f.name) as request_count 
             FROM functions_deployments f 
             WHERE f.project_id = $1 ORDER BY f.created_at DESC`,
-            [projectId]
+            [req.project.id]
         );
         res.json({ functions: result.rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1366,7 +1366,7 @@ app.get('/v1/console/projects/:projectId/functions/:name/logs', authenticateToke
     try {
         const result = await pool.query(
             'SELECT * FROM function_logs WHERE project_id = $1 AND function_name = $2 ORDER BY created_at DESC LIMIT 50',
-            [projectId, name]
+            [req.project.id, name]
         );
         res.json({ logs: result.rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1375,11 +1375,11 @@ app.get('/v1/console/projects/:projectId/functions/:name/logs', authenticateToke
 app.delete('/v1/console/projects/:projectId/functions/:name', authenticateToken, resolveProject, async (req, res) => {
     const { projectId, name } = req.params;
     try {
-        await pool.query('DELETE FROM functions_deployments WHERE project_id = $1 AND name = $2', [projectId, name]);
-        await pool.query('DELETE FROM function_logs WHERE project_id = $1 AND function_name = $2', [projectId, name]);
+        await pool.query('DELETE FROM functions_deployments WHERE project_id = $1 AND name = $2', [req.project.id, name]);
+        await pool.query('DELETE FROM function_logs WHERE project_id = $1 AND function_name = $2', [req.project.id, name]);
 
         const axios = require('axios');
-        try { await axios.delete(`http://localhost:3005/internal/delete/${projectId}/${name}`); } catch (err) { }
+        try { await axios.delete(`http://localhost:3005/internal/delete/${req.project.id}/${name}`); } catch (err) { }
 
         res.json({ success: true, message: "Function deleted successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1431,34 +1431,31 @@ app.use('/v1/messaging/register', authenticateAppToken, resolveProject, (req, re
 });
 
 app.put('/v1/console/projects/:projectId/messaging/config', authenticateToken, resolveProject, async (req, res) => {
-    const { projectId } = req.params;
     const { serviceAccount } = req.body;
     try {
-        await pool.query('UPDATE projects SET fcm_service_account = $1 WHERE id = $2', [JSON.stringify(serviceAccount), projectId]);
-        await axios.post(`http://localhost:3200/config/reset/${projectId}`).catch(() => { });
+        await pool.query('UPDATE projects SET fcm_service_account = $1 WHERE id = $2', [JSON.stringify(serviceAccount), req.project.id]);
+        await axios.post(`http://localhost:3200/config/reset/${req.project.id}`).catch(() => { });
         res.json({ message: "Messaging configuration updated" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/v1/console/projects/:projectId/messaging/send', authenticateToken, resolveProject, (req, res) => {
-    const { projectId } = req.params;
-    axios.post(`http://localhost:3200/send/${projectId}`, req.body)
+    axios.post(`http://localhost:3200/send/${req.project.id}`, req.body)
         .then(r => res.json(r.data))
         .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
 });
 
 app.get('/v1/console/projects/:projectId/messaging/history', authenticateToken, resolveProject, async (req, res) => {
-    const { projectId } = req.params;
     try {
-        const history = await pool.query('SELECT * FROM notifications_history WHERE project_id = $1 ORDER BY created_at DESC LIMIT 50', [projectId]);
-        const stats = await pool.query('SELECT COUNT(*) as total_devices FROM messaging_tokens WHERE project_id = $1', [projectId]);
+        const history = await pool.query('SELECT * FROM notifications_history WHERE project_id = $1 ORDER BY created_at DESC LIMIT 50', [req.project.id]);
+        const stats = await pool.query('SELECT COUNT(*) as total_devices FROM messaging_tokens WHERE project_id = $1', [req.project.id]);
         res.json({ history: history.rows, total_devices: parseInt(stats.rows[0].total_devices) });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // ====================================================
 
 app.post('/v1/console/projects/:projectId/functions/:name/schedule', authenticateToken, resolveProject, async (req, res) => {
-    const { projectId, name } = req.params;
+    const { name } = req.params;
     const { cronString } = req.body;
 
     try {
@@ -1468,10 +1465,10 @@ app.post('/v1/console/projects/:projectId/functions/:name/schedule', authenticat
 
         await pool.query(
             "UPDATE functions_deployments SET trigger_type = 'schedule', trigger_value = $1, updated_at = NOW() WHERE project_id = $2 AND name = $3",
-            [cronString, projectId, name]
+            [cronString, req.project.id, name]
         );
 
-        await updateFunctionSchedule(projectId, name, cronString);
+        await updateFunctionSchedule(req.project.id, name, cronString);
         res.json({ success: true, message: "Schedule updated successfully" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
