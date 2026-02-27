@@ -91,8 +91,8 @@ app.use('/functions', createProxyMiddleware({
 }));
 
 // 2. Payments Proxy (Supports SSL and dynamic routing)
-// WEBHOOKS FIRST (So they don't hit the project-id proxy)
-app.post('/v1/payments/webhooks/:gateway', createProxyMiddleware({
+// WEBHOOKS FIRST
+app.post('/webhook/payments/:gateway', createProxyMiddleware({
     target: 'http://127.0.0.1:3800',
     pathRewrite: (path) => {
         const parts = path.split('/');
