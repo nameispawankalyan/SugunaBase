@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -50,6 +51,7 @@
             font-weight: 800;
             background: linear-gradient(135deg, #a78bfa, var(--primary));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 3rem;
             display: flex;
@@ -69,7 +71,8 @@
             gap: 12px;
         }
 
-        .nav-item:hover, .nav-item.active {
+        .nav-item:hover,
+        .nav-item.active {
             background: rgba(99, 102, 241, 0.1);
             color: var(--primary);
         }
@@ -137,7 +140,9 @@
             margin-top: 0.5rem;
         }
 
-        .trend-up { color: #22c55e; }
+        .trend-up {
+            color: #22c55e;
+        }
 
         /* Chart Section */
         .chart-container {
@@ -155,14 +160,102 @@
 
         /* Animations */
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        .card { animation: fadeIn 0.6s ease forwards; }
+        .card {
+            animation: fadeIn 0.6s ease forwards;
+        }
 
+        /* Payment Specific Styles */
+        .input-field {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.8rem;
+            color: white;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .input-field:focus {
+            border-color: var(--primary);
+        }
+
+        .save-btn {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.8rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        .save-btn:hover {
+            opacity: 0.9;
+        }
+
+        /* Toggle Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 22px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #334155;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: var(--primary);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(22px);
+        }
     </style>
 </head>
+
 <body>
     <div class="sidebar">
         <div class="logo">
@@ -173,44 +266,153 @@
         <a href="#" class="nav-item">🔥 Firestore</a>
         <a href="#" class="nav-item">📁 Storage</a>
         <a href="#" class="nav-item">⚡ Functions</a>
-        <a href="#" class="nav-item">⚙️ Settings</a>
+        <a href="#" class="nav-item" onclick="showTab('settings')">⚙️ Settings</a>
+        <a href="#" class="nav-item" onclick="showTab('payments')" id="nav-payments">💳 Suguna Payment</a>
     </div>
 
     <div class="main">
-        <header>
-            <div>
-                <h1 style="font-size: 1.8rem;">Project Overview</h1>
-                <p style="color: var(--text-muted);">Welcome back, Developer!</p>
-            </div>
-            <div class="project-badge">Project ID: 15 (SugunaAuth)</div>
-        </header>
+        <div id="dashboard-tab">
+            <header>
+                <div>
+                    <h1 style="font-size: 1.8rem;">Project Overview</h1>
+                    <p style="color: var(--text-muted);">Welcome back, Developer!</p>
+                </div>
+                <div class="project-badge">Project ID: 15 (SugunaAuth)</div>
+            </header>
 
-        <div class="stats-grid">
-            <div class="card" style="animation-delay: 0.1s;">
-                <div class="card-label">Total Users</div>
-                <div class="card-value">1,248</div>
-                <div class="card-trend trend-up">↑ 12% this month</div>
+            <div class="stats-grid">
+                <div class="card" style="animation-delay: 0.1s;">
+                    <div class="card-label">Total Users</div>
+                    <div class="card-value">1,248</div>
+                    <div class="card-trend trend-up">↑ 12% this month</div>
+                </div>
+                <div class="card" style="animation-delay: 0.2s;">
+                    <div class="card-label">Firestore Reads</div>
+                    <div class="card-value">42.5k</div>
+                    <div class="card-trend trend-up">↑ 24% today</div>
+                </div>
+                <div class="card" style="animation-delay: 0.3s;">
+                    <div class="card-label">Firestore Writes</div>
+                    <div class="card-value">12.1k</div>
+                    <div class="card-trend">Stable activity</div>
+                </div>
+                <div class="card" style="animation-delay: 0.4s;">
+                    <div class="card-label">Storage Used</div>
+                    <div class="card-value">4.2 GB</div>
+                    <div class="card-trend trend-up">↑ 500MB used</div>
+                </div>
             </div>
-            <div class="card" style="animation-delay: 0.2s;">
-                <div class="card-label">Firestore Reads</div>
-                <div class="card-value">42.5k</div>
-                <div class="card-trend trend-up">↑ 24% today</div>
-            </div>
-            <div class="card" style="animation-delay: 0.3s;">
-                <div class="card-label">Firestore Writes</div>
-                <div class="card-value">12.1k</div>
-                <div class="card-trend">Stable activity</div>
-            </div>
-            <div class="card" style="animation-delay: 0.4s;">
-                <div class="card-label">Storage Used</div>
-                <div class="card-value">4.2 GB</div>
-                <div class="card-trend trend-up">↑ 500MB used</div>
-            </div>
+
         </div>
 
-        <div class="chart-container">
-            <h2>Activity Over Time (Reads vs Writes)</h2>
-            <canvas id="usageChart" height="100"></canvas>
+        <!-- Suguna Payments Tab -->
+        <div id="payments-tab" style="display: none;">
+            <header>
+                <div>
+                    <h1 style="font-size: 1.8rem;">Suguna Payments</h1>
+                    <p style="color: var(--text-muted);">Manage your monetization and transactions.</p>
+                </div>
+            </header>
+
+            <div style="display: flex; gap: 15px; margin-bottom: 2rem;">
+                <button class="project-badge" style="cursor: pointer;" onclick="showPaymentSubTab('methods')"
+                    id="btn-methods">Payment Methods</button>
+                <button class="project-badge" style="cursor: pointer; opacity: 0.6;"
+                    onclick="showPaymentSubTab('transactions')" id="btn-transactions">Transactions</button>
+            </div>
+
+            <!-- Methods Section -->
+            <div id="payment-methods-ui">
+                <div class="stats-grid">
+                    <div class="card">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h3 style="font-size: 1.1rem;">Razorpay</h3>
+                            <label class="switch">
+                                <input type="checkbox" id="rzp_enable">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Direct Indian
+                            payments via UPI, Cards, and Netbanking.</p>
+                        <input type="text" placeholder="Key ID" class="input-field">
+                        <input type="password" placeholder="Key Secret" class="input-field">
+                        <button class="save-btn">Save Configuration</button>
+                    </div>
+
+                    <div class="card">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h3 style="font-size: 1.1rem;">Cashfree</h3>
+                            <label class="switch">
+                                <input type="checkbox" id="cf_enable">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Scale with
+                            Cashfree's robust checkout and auto-collect.</p>
+                        <input type="text" placeholder="App ID" class="input-field">
+                        <input type="password" placeholder="Secret Key" class="input-field">
+                        <button class="save-btn">Save Configuration</button>
+                    </div>
+
+                    <div class="card">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h3 style="font-size: 1.1rem;">Google In-App</h3>
+                            <label class="switch">
+                                <input type="checkbox" id="gp_enable">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Native Android
+                            billing for digital products and coins.</p>
+                        <input type="text" placeholder="Product ID (e.g. coins_100)" class="input-field">
+                        <button class="save-btn">Link Product</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transactions Section -->
+            <div id="payment-transactions-ui" style="display: none;">
+                <div class="card" style="padding: 0; overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead>
+                            <tr
+                                style="background: rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">
+                                <th style="padding: 1.2rem;">Transaction ID</th>
+                                <th style="padding: 1.2rem;">User</th>
+                                <th style="padding: 1.2rem;">Item</th>
+                                <th style="padding: 1.2rem;">Amount</th>
+                                <th style="padding: 1.2rem;">Gateway</th>
+                                <th style="padding: 1.2rem;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="txn-body" style="font-size: 0.9rem;">
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 1rem;">txn_8k2m9l1</td>
+                                <td style="padding: 1rem;">Ram Charan</td>
+                                <td style="padding: 1rem;">1000 Coins</td>
+                                <td style="padding: 1rem;">₹500.00</td>
+                                <td style="padding: 1rem;">Razorpay</td>
+                                <td style="padding: 1rem;"><span
+                                        style="color: #22c55e; background: rgba(34, 197, 94, 0.1); padding: 4px 10px; border-radius: 50px; font-size: 0.75rem;">SUCCESS</span>
+                                </td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 1rem;">txn_gp_3n4v8</td>
+                                <td style="padding: 1rem;">Pawan Kalyan</td>
+                                <td style="padding: 1rem;">Pro Pack</td>
+                                <td style="padding: 1rem;">₹250.00</td>
+                                <td style="padding: 1rem;">Google Play</td>
+                                <td style="padding: 1rem;"><span
+                                        style="color: #22c55e; background: rgba(34, 197, 94, 0.1); padding: 4px 10px; border-radius: 50px; font-size: 0.75rem;">SUCCESS</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -254,6 +456,26 @@
                 }
             }
         });
+
+        // Tab Switching Logic
+        function showTab(tab) {
+            document.getElementById('dashboard-tab').style.display = (tab === 'dashboard') ? 'block' : 'none';
+            document.getElementById('payments-tab').style.display = (tab === 'payments') ? 'block' : 'none';
+
+            // Handle active class in sidebar
+            const items = document.querySelectorAll('.nav-item');
+            items.forEach(i => i.classList.remove('active'));
+            if (tab === 'payments') document.getElementById('nav-payments').classList.add('active');
+        }
+
+        function showPaymentSubTab(sub) {
+            document.getElementById('payment-methods-ui').style.display = (sub === 'methods') ? 'block' : 'none';
+            document.getElementById('payment-transactions-ui').style.display = (sub === 'transactions') ? 'block' : 'none';
+
+            document.getElementById('btn-methods').style.opacity = (sub === 'methods') ? '1' : '0.6';
+            document.getElementById('btn-transactions').style.opacity = (sub === 'transactions') ? '1' : '0.6';
+        }
     </script>
 </body>
+
 </html>

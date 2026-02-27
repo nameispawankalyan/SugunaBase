@@ -21,6 +21,7 @@ sudo fuser -k 3600/tcp || true
 sudo fuser -k 3700/tcp || true
 sudo fuser -k 3005/tcp || true
 sudo fuser -k 3100/tcp || true
+sudo fuser -k 3800/tcp || true
 sudo fuser -k 3000/tcp || true
 
 # 2. Deploy Services one by one
@@ -44,6 +45,7 @@ deploy_service "suguna-storage" "suguna-storage" 3500 "index.js"
 deploy_service "suguna-hosting" "suguna-hosting" 3600 "index.js"
 deploy_service "suguna-logs" "suguna-logs" 3700 "index.js"
 deploy_service "suguna-functions" "cloud-functions" 3005 "server.js"
+deploy_service "suguna-payments" "suguna-payments" 3800 "index.js"
 
 # Suguna Cast (Needs Build)
 echo "🚀 Deploying Suguna Cast on Port 3100..."

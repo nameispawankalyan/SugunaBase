@@ -499,6 +499,16 @@ const initDB = async () => {
     }
 };
 
+// ====================================================
+// WEBHOOK PROXY FOR PAYMENTS (NO AUTH)
+// ====================================================
+app.post('/webhook/payments/*', (req, res) => {
+    const path = req.params[0];
+    axios.post(`http://127.0.0.1:3800/webhook/${path}`, req.body, { headers: req.headers })
+        .then(r => res.json(r.data))
+        .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+});
+// ====================================================
 // --- CRON ENGINE (Scheduled Functions) ---
 const activeCronJobs = new Map();
 
@@ -521,6 +531,31 @@ const runScheduledFunction = async (projectId, funcName) => {
 };
 
 const initSchedules = async () => {
+    // ====================================================
+    // PAYMENTS PROXY (suguna-payments: 3600)
+    // ====================================================
+    app.use('/v1/payments', authenticateToken, resolveProject, (req, res, next) => {
+        req.headers['x-project-id'] = req.project.project_id;
+        next();
+    }, createProxyMiddleware({
+        target: 'http://127.0.0.1:3800',
+        pathRewrite: { '^/v1/payments': '/' },
+        changeOrigin: true
+    }));
+    // App payments endpoints directly
+    app.get('/v1/payments/app/gateways', resolveProject, (req, res) => {
+        axios.get('http://127.0.0.1:3800/gateways', { headers: { 'x-project-id': req.project.project_id } })
+            .then(r => res.json(r.data))
+            .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+    });
+    app.post('/v1/payments/app/create-order', resolveProject, (req, res) => {
+        req.body.project_id = req.project.project_id;
+        axios.post('http://127.0.0.1:3800/create-order', req.body)
+            .then(r => res.json(r.data))
+            .catch(e => res.status(e.response?.status || 500).json(e.response?.data || { error: e.message }));
+    });
+    // ====================================================
+
     try {
         const res = await pool.query("SELECT * FROM functions_deployments WHERE trigger_type = 'schedule' AND trigger_value IS NOT NULL");
         res.rows.forEach(fn => {

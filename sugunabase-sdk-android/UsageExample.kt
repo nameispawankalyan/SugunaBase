@@ -165,5 +165,28 @@ class UsageExample {
 
         // 3. To send messages, use the SugunaBase Console 
         // OR call the backend API: POST /v1/console/projects/{id}/messaging/send
+    /**
+     * Suguna Payments (Monetization & In-App Purchases)
+     */
+    fun paymentsWorkflows(context: android.content.Context) {
+        val payments = co.suguna.sdk.payments.SugunaPayments.getInstance()
+
+        // 1. Show the Suguna Payment Bottom Sheet
+        // This will automatically show Razorpay, Cashfree, or Google Play
+        // based on what the developer enabled in the SugunaBase Console.
+        payments.showPaymentSheet(
+            amount = 500.0,
+            currency = "INR",
+            itemType = "Coins",
+            quantity = 1000
+        ) { result ->
+            result.onSuccess { txn ->
+                Log.d("SugunaPayments", "Transaction Successful: ${txn.id}")
+                // Your backend webhook will also be triggered to add coins safely!
+            }
+            result.onFailure { error ->
+                Log.e("SugunaPayments", "Payment Failed: ${error.message}")
+            }
+        }
     }
 }

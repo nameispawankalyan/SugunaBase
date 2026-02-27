@@ -36,7 +36,7 @@ class SugunaAuth private constructor() {
             )
         }
 
-    fun checkProjectStatus(projectId: Int, callback: (Result<ProjectStatusResponse>) -> Unit) {
+    fun checkProjectStatus(projectId: String, callback: (Result<ProjectStatusResponse>) -> Unit) {
         SugunaNetwork.api.checkProjectStatus(projectId).enqueue(object : Callback<ProjectStatusResponse> {
             override fun onResponse(call: Call<ProjectStatusResponse>, response: Response<ProjectStatusResponse>) {
                 if (response.isSuccessful && response.body() != null) {
@@ -79,7 +79,7 @@ class SugunaAuth private constructor() {
     /**
      * Simplified helper for Google Sign-In integration
      */
-    fun signInWithGoogle(projectId: Int, email: String, googleId: String, name: String, photoUrl: String?, callback: (Result<SugunaUser>) -> Unit) {
+    fun signInWithGoogle(projectId: String, email: String, googleId: String, name: String, photoUrl: String?, callback: (Result<SugunaUser>) -> Unit) {
         val request = AppLoginRequest(
             project_id = projectId,
             email = email,

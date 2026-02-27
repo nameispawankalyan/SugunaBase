@@ -22,7 +22,8 @@ import {
   PhoneCall,
   Bell,
   Activity,
-  FileText
+  FileText,
+  CreditCard
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -207,6 +208,7 @@ const Sidebar = () => {
             <NavItem href={`/project/${projectId}/functions`} icon={FileCode} label="Functions" pathname={pathname} />
             <NavItem href={`/project/${projectId}/cast`} icon={PhoneCall} label="Suguna Cast" pathname={pathname} />
             <NavItem href={`/project/${projectId}/messaging`} icon={Bell} label="Cloud Messaging" pathname={pathname} />
+            <NavItem href={`/project/${projectId}/payments`} icon={CreditCard} label="Suguna Payment" pathname={pathname} />
           </nav>
         </div>
 

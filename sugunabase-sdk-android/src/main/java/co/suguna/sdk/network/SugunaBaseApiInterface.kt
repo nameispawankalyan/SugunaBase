@@ -10,7 +10,7 @@ interface SugunaBaseApiInterface {
     fun appLogin(@Body request: AppLoginRequest): Call<AppLoginResponse>
 
     @GET("v1/app/check-project/{id}")
-    fun checkProjectStatus(@Path("id") id: Int): Call<ProjectStatusResponse>
+    fun checkProjectStatus(@Path("id") id: String): Call<ProjectStatusResponse>
 
     // Firestore Endpoints
     @GET("v1/firestore/{collection}/{document}")
