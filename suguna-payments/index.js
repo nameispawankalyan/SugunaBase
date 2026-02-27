@@ -193,12 +193,60 @@ async function getProjectGatewayConfig(projectId, gateway) {
 app.get('/gateways', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
+        if (!projectId) return res.status(400).json({ error: "Missing x-project-id header" });
+
         const result = await pool.query(
-            'SELECT gateway, is_enabled FROM project_payments_config WHERE project_id = $1 AND is_enabled = TRUE',
+            'SELECT gateway FROM project_payments_config WHERE project_id = $1 AND is_enabled = TRUE',
             [projectId]
         );
         res.json({ gateways: result.rows.map(r => r.gateway) });
     } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Create Order for Razorpay/Cashfree
+app.post('/orders/create', async (req, res) => {
+    const { gateway, amount, currency, app_user_id } = req.body;
+    const projectId = req.headers['x-project-id'];
+
+    if (!projectId) return res.status(400).json({ error: "Missing x-project-id header" });
+
+    try {
+        const config = await getProjectGatewayConfig(projectId, gateway);
+
+        if (gateway === 'razorpay') {
+            const instance = new Razorpay({
+                key_id: config.api_key,
+                key_secret: config.api_secret,
+            });
+
+            const order = await instance.orders.create({
+                amount: Math.round(amount * 100), // convert to paise
+                currency: currency || 'INR',
+                receipt: `rcpt_${projectId}_${Date.now()}`
+            });
+
+            // Pre-insert transaction as PENDING
+            await pool.query(`
+                INSERT INTO transactions (id, project_id, app_user_id, order_id, amount, currency, gateway, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [order.id, projectId, app_user_id, order.id, amount, currency || 'INR', 'razorpay', 'PENDING']);
+
+            res.json({
+                order_id: order.id,
+                amount: order.amount,
+                currency: order.currency,
+                key_id: config.api_key // Public key for SDK
+            });
+        } else if (gateway === 'google_play') {
+            // For GP, we just return that it's native
+            res.json({ native: true, gateway: 'google_play' });
+        } else {
+            res.status(400).json({ error: "Gateway order creation not implemented" });
+        }
+    } catch (e) {
+        console.error('[PAYMENTS] Order Create Error:', e.message);
         res.status(500).json({ error: e.message });
     }
 });
