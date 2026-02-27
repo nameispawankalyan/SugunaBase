@@ -18,25 +18,36 @@ const pool = new Pool({
 
 const initDB = async () => {
     try {
+        // Create table if it doesn't exist
         await pool.query(`
             CREATE TABLE IF NOT EXISTS project_payments_config (
                 id SERIAL PRIMARY KEY,
-                project_id VARCHAR(100) NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                project_id VARCHAR(100) NOT NULL,
                 gateway VARCHAR(50) NOT NULL,
                 api_key TEXT,
                 api_secret TEXT,
                 webhook_url TEXT,
                 webhook_secret TEXT,
-                is_enabled BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(project_id, gateway)
             );
         `);
+
+        // Check and Add 'is_enabled' column if missing
+        await pool.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='project_payments_config' AND column_name='is_enabled') THEN
+                    ALTER TABLE project_payments_config ADD COLUMN is_enabled BOOLEAN DEFAULT TRUE;
+                END IF;
+            END $$;
+        `);
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS transactions (
                 id VARCHAR(100) PRIMARY KEY,
-                project_id VARCHAR(100) NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-                app_user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+                project_id VARCHAR(100) NOT NULL,
+                app_user_id VARCHAR(100), 
                 order_id VARCHAR(255),
                 amount NUMERIC(10, 2) NOT NULL,
                 currency VARCHAR(10) NOT NULL,
@@ -48,7 +59,7 @@ const initDB = async () => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Payments Database Initialized');
+        console.log('✅ Payments Database Initialized & Synced');
     } catch (e) {
         console.error('❌ Payments DB Init Error:', e.message);
     }
