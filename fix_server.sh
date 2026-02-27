@@ -4,12 +4,14 @@ echo "🔧 Starting Distributed SugunaBase Deployment..."
 
 # 0. Force Update from GitHub
 echo "⏬ Pulling latest code from GitHub..."
-git fetch origin main
+git fetch --all
 git reset --hard origin/main
+git clean -fd
 
 # 1. Stop all existing processes to clear ports
 echo "🛑 Stopping existing processes..."
 pm2 delete all || true
+pm2 flush || true
 
 # Kill any existing processes hanging on core ports
 sudo fuser -k 5000/tcp || true

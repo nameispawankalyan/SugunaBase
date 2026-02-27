@@ -12,6 +12,8 @@ const port = process.env.PORT || 3800;
 app.use(cors());
 app.use(express.json());
 
+console.log('🚀 Suguna Payments v1.1 Starting...');
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://suguna_admin:suguna123@localhost:5432/sugunabase_core',
 });
@@ -55,7 +57,7 @@ const initDB = async () => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Payments Database Fully Synced & Migrated');
+        console.log('✅ Payments Database: FORCE SYNC COMPLETE (Slugs Enabled)');
     } catch (e) {
         console.error('❌ Payments DB Init Error:', e.message);
     }
