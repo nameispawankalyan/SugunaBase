@@ -6,7 +6,9 @@ echo "🔧 Starting Distributed SugunaBase Deployment..."
 echo "⏬ Pulling latest code from GitHub..."
 git fetch --all
 git reset --hard origin/main
-git clean -fd
+# CRITICAL: We don't use 'git clean -fd' anymore because it deletes user uploads!
+# Only clean node_modules if needed, but carefully.
+# git clean -fd  <-- REMOVED to protect your storage_uploads/ and .env files
 
 # 1. Stop all existing processes to clear ports
 echo "🛑 Stopping existing processes..."

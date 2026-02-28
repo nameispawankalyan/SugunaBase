@@ -11,3 +11,8 @@ cert.pem
 logs/
 !platform/app/admin/logs/page.tsx
 Release/
+storage_uploads/
+suguna-storage/storage_uploads/
+*.db
+.env
+local_data/
