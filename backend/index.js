@@ -906,7 +906,12 @@ app.get('/v1/app/check-project/:id', resolveProject, async (req, res) => {
     const projectId = req.params.id;
     console.log(`🔍[App] Checking status for Project ID: ${projectId} `);
     try {
-        const result = await pool.query('SELECT google_sign_in_enabled FROM projects WHERE id = $1', [projectId]);
+        const isNumeric = /^\d+$/.test(String(projectId));
+        const query = isNumeric
+            ? 'SELECT google_sign_in_enabled FROM projects WHERE id = $1'
+            : 'SELECT google_sign_in_enabled FROM projects WHERE project_id = $1';
+            
+        const result = await pool.query(query, [projectId]);
         if (result.rows.length === 0) {
             console.log(`❌ Project ${projectId} not found`);
             return res.json({ exists: false, active: false });
@@ -922,8 +927,14 @@ app.get('/v1/app/check-project/:id', resolveProject, async (req, res) => {
 
 // Internal Route to get Project Activity Status for Cloud Functions Hub
 app.get('/v1/internal/projects/:projectId/status', resolveProject, async (req, res) => {
+    const projectId = req.params.projectId;
     try {
-        const result = await pool.query('SELECT is_active FROM projects WHERE id = $1', [req.params.projectId]);
+        const isNumeric = /^\d+$/.test(String(projectId));
+        const query = isNumeric
+            ? 'SELECT is_active FROM projects WHERE id = $1'
+            : 'SELECT is_active FROM projects WHERE project_id = $1';
+
+        const result = await pool.query(query, [projectId]);
         if (result.rows.length === 0) {
             return res.json({ exists: false, active: false });
         }
