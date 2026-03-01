@@ -236,6 +236,8 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                 <option value="SUCCESS">Success</option>
                                 <option value="PENDING">Pending</option>
                                 <option value="FAILED">Failed</option>
+                                <option value="REFUNDED">Refunded</option>
+                                <option value="CANCELLED">Cancelled</option>
                             </select>
                         </div>
                         <button className="text-xs text-blue-600 font-bold hover:underline whitespace-nowrap">Download Report</button>
@@ -274,7 +276,12 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${txn.status === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' : txn.status === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
+                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${txn.status === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
+                                                        txn.status === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                            txn.status === 'REFUNDED' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                                                txn.status === 'CANCELLED' ? 'bg-gray-50 text-gray-600 border-gray-100' :
+                                                                    'bg-orange-50 text-orange-600 border-orange-100'
+                                                    }`}>
                                                     {txn.status}
                                                 </span>
                                             </td>
