@@ -157,16 +157,34 @@ app.post('/verify/google-play', async (req, res) => {
     }
 });
 
-// Fetch transactions for a project
+// Fetch transactions for a project with pagination and filtering
 app.get('/transactions', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
         if (!projectId) return res.status(400).json({ error: "Missing x-project-id header" });
 
-        const result = await pool.query(
-            'SELECT * FROM transactions WHERE project_id = $1 ORDER BY created_at DESC LIMIT 100',
-            [projectId]
-        );
+        const { limit = 50, offset = 0, search = '', status = '' } = req.query;
+
+        let query = 'SELECT * FROM transactions WHERE project_id = $1';
+        let params = [projectId];
+        let paramIndex = 2;
+
+        if (status) {
+            query += ` AND status = $${paramIndex++}`;
+            params.push(status);
+        }
+
+        if (search) {
+            query += ` AND (id ILIKE $${paramIndex} OR app_user_id ILIKE $${paramIndex})`;
+            params.push(`%${search}%`);
+            paramIndex++;
+        }
+
+        query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        params.push(parseInt(limit));
+        params.push(parseInt(offset));
+
+        const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (e) {
         console.error('[PAYMENTS] GET Transactions Error:', e.message);

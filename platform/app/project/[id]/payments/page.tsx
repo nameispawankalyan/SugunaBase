@@ -13,6 +13,12 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
     const [products, setProducts] = useState<any[]>([]);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Filtering & Pagination
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [page, setPage] = useState(0);
+    const transactionsPerPage = 50;
+
     // Modal States
     const [showConfigModal, setShowConfigModal] = useState<string | null>(null);
     const [showProductModal, setShowProductModal] = useState<boolean>(false);
@@ -46,7 +52,13 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
 
     const fetchTransactions = async () => {
         try {
-            const data = await api.get(`/payments/${id}/transactions`);
+            const params = new URLSearchParams({
+                limit: transactionsPerPage.toString(),
+                offset: (page * transactionsPerPage).toString(),
+                search: search,
+                status: statusFilter
+            });
+            const data = await api.get(`/payments/${id}/transactions?${params.toString()}`);
             setTransactions(data || []);
         } catch (e) {
             console.error("Failed to fetch transactions", e);
@@ -65,10 +77,15 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
     useEffect(() => {
         if (id) {
             fetchConfigs();
-            if (activeTab === 'transactions') fetchTransactions();
             if (activeTab === 'products') fetchProducts();
         }
     }, [id, activeTab]);
+
+    useEffect(() => {
+        if (id && activeTab === 'transactions') {
+            fetchTransactions();
+        }
+    }, [id, activeTab, search, statusFilter, page]);
 
     const openConfig = (gateway: string) => {
         const existing = configs.find(c => c.gateway === gateway);
@@ -195,9 +212,33 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
 
             {activeTab === 'transactions' && (
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                        <h3 className="text-sm font-bold text-gray-600 uppercase tracking-widest">Recent Activity</h3>
-                        <button className="text-xs text-blue-600 font-bold hover:underline">Download Report</button>
+                    <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center bg-gray-50/50 gap-4">
+                        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                            <h3 className="text-sm font-bold text-gray-600 uppercase tracking-widest mr-4">Activity</h3>
+
+                            <div className="relative flex-1 md:w-64">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search UID / Txn ID"
+                                    className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm w-full outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    value={search}
+                                    onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                                />
+                            </div>
+
+                            <select
+                                className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                                value={statusFilter}
+                                onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+                            >
+                                <option value="">All Status</option>
+                                <option value="SUCCESS">Success</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="FAILED">Failed</option>
+                            </select>
+                        </div>
+                        <button className="text-xs text-blue-600 font-bold hover:underline whitespace-nowrap">Download Report</button>
                     </div>
                     <div className="min-h-[400px]">
                         {transactions.length === 0 ? (
@@ -212,6 +253,7 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                     <tr>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Transaction ID</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">User ID</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Time</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Amount</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Gateway</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Status</th>
@@ -222,6 +264,9 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                         <tr key={txn.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 text-sm font-mono text-gray-600">{txn.id}</td>
                                             <td className="px-6 py-4 text-sm text-gray-600">{txn.app_user_id || 'Anonymous'}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                                                {new Date(txn.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                            </td>
                                             <td className="px-6 py-4 text-sm font-bold text-gray-900">{txn.currency} {txn.amount}</td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
@@ -239,6 +284,25 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                             </table>
                         )}
                     </div>
+                    {transactions.length > 0 && (
+                        <div className="p-4 border-t border-gray-100 bg-gray-50/30 flex justify-between items-center text-sm font-medium">
+                            <button
+                                onClick={() => setPage(Math.max(0, page - 1))}
+                                disabled={page === 0}
+                                className="px-4 py-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                            >
+                                Previous
+                            </button>
+                            <span className="text-gray-500">Page {page + 1}</span>
+                            <button
+                                onClick={() => setPage(page + 1)}
+                                disabled={transactions.length < transactionsPerPage}
+                                className="px-4 py-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
