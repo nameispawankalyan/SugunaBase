@@ -233,6 +233,7 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                 onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
                             >
                                 <option value="">All Status</option>
+                                <option value="CREATED">Created</option>
                                 <option value="SUCCESS">Success</option>
                                 <option value="PENDING">Pending</option>
                                 <option value="FAILED">Failed</option>
@@ -280,7 +281,8 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                                         txn.status === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
                                                             txn.status === 'REFUNDED' ? 'bg-purple-50 text-purple-600 border-purple-100' :
                                                                 txn.status === 'CANCELLED' ? 'bg-gray-50 text-gray-600 border-gray-100' :
-                                                                    'bg-orange-50 text-orange-600 border-orange-100'
+                                                                    txn.status === 'CREATED' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                                        'bg-orange-50 text-orange-600 border-orange-100'
                                                     }`}>
                                                     {txn.status}
                                                 </span>

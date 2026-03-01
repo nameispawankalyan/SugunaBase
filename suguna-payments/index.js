@@ -245,11 +245,11 @@ app.post('/orders/create', async (req, res) => {
                 receipt: `rcpt_${projectId}_${Date.now()}`
             });
 
-            // Pre-insert transaction as PENDING
+            // Pre-insert transaction as CREATED
             await pool.query(`
                 INSERT INTO transactions (id, project_id, app_user_id, order_id, amount, currency, gateway, status)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [order.id, projectId, app_user_id, order.id, amount, currency || 'INR', 'razorpay', 'PENDING']);
+            `, [order.id, projectId, app_user_id, order.id, amount, currency || 'INR', 'razorpay', 'CREATED']);
 
             res.json({
                 order_id: order.id,
@@ -288,11 +288,11 @@ app.post('/orders/create', async (req, res) => {
 
             const cfOrder = response.data;
 
-            // Pre-insert transaction as PENDING
+            // Pre-insert transaction as CREATED
             await pool.query(`
                 INSERT INTO transactions (id, project_id, app_user_id, order_id, amount, currency, gateway, status)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [txnId, projectId, app_user_id, cfOrder.order_id, amount, currency || 'INR', 'cashfree', 'PENDING']);
+            `, [txnId, projectId, app_user_id, cfOrder.order_id, amount, currency || 'INR', 'cashfree', 'CREATED']);
 
             const cfCheckoutUrl = isSandbox
                 ? `https://payments-test.cashfree.com/order/${cfOrder.payment_session_id}`
@@ -352,10 +352,13 @@ app.get('/checkout/razorpay/:projectId/:orderId', async (req, res) => {
         if (txnRes.rows.length === 0) return res.send("Transaction not found");
         const txn = txnRes.rows[0];
 
-        // 2. Get Gateway Config (for API Key)
+        // 2. Mark as PENDING when user opens checkout
+        await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['PENDING', orderId]);
+
+        // 3. Get Gateway Config (for API Key)
         const config = await getProjectGatewayConfig(projectId, 'razorpay');
 
-        // 3. Render Simple Razorpay HTML
+        // 4. Render Simple Razorpay HTML
         const html = `
             <!DOCTYPE html>
             <html>
@@ -388,6 +391,8 @@ app.get('/checkout/razorpay/:projectId/:orderId', async (req, res) => {
                         },
                         "modal": {
                             "ondismiss": function(){
+                                // We can't easily update DB to CANCELLED here as it's client-side, 
+                                // but the sugunabase:// link can handle it in the app if needed.
                                 window.location.href = "sugunabase://payment/cancel";
                             }
                         },
@@ -411,6 +416,9 @@ app.get('/checkout/cashfree/:projectId/:orderId', async (req, res) => {
         const txnRes = await pool.query('SELECT * FROM transactions WHERE order_id = $1 AND project_id = $2', [orderId, projectId]);
         if (txnRes.rows.length === 0) return res.send("Transaction not found. Please try again.");
         const txn = txnRes.rows[0];
+
+        // Mark as PENDING
+        await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['PENDING', orderId]);
 
         // Get config to check if it's sandbox
         const config = await getProjectGatewayConfig(projectId, 'cashfree');
@@ -588,7 +596,7 @@ app.post('/create-order', async (req, res) => {
 
         await pool.query(
             `INSERT INTO transactions(id, project_id, app_user_id, order_id, amount, currency, item_type, quantity, gateway, status)
-        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING')`,
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, 'CREATED')`,
             [txnId, project_id, app_user_id, orderId, amount, currency, item_type, quantity, gateway]
         );
 
@@ -607,31 +615,27 @@ app.post('/create-order', async (req, res) => {
 app.post('/webhook/razorpay', async (req, res) => {
     // Razorpay webhook validation
     try {
-        const secret = req.headers['x-razorpay-signature'];
-        // You would typically lookup the secret by grabbing the project from the payload
-        // But razorpay webhooks don't send project_id directly easily unless attached as notes.
-        // Let's assume order_id exists, we find the project from DB.
-        const orderId = req.body.payload.payment.entity.order_id;
+        const { event, payload } = req.body;
+        const orderId = payload.payment?.entity.order_id || payload.order?.entity.id;
+
+        if (!orderId) return res.status(200).json({ status: 'ignored' });
 
         const txnRes = await pool.query('SELECT * FROM transactions WHERE order_id = $1 LIMIT 1', [orderId]);
-        if (txnRes.rows.length === 0) return res.status(404).json({ error: 'Txn not found' });
+        if (txnRes.rows.length === 0) return res.status(200).json({ status: 'not_found' });
 
         const txn = txnRes.rows[0];
 
-        // Ensure success
-        if (req.body.event === 'payment.captured' || req.body.event === 'order.paid') {
+        if (event === 'payment.captured' || event === 'order.paid') {
             await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['SUCCESS', orderId]);
-
-            // TRIGGER DEVELOPER WEBHOOK
-            await triggerDeveloperWebhook(txn.project_id, 'payment.success', {
-                user_id: txn.app_user_id,
-                item_type: txn.item_type,
-                quantity: txn.quantity,
-                amount_paid: txn.amount,
-                currency: txn.currency,
-                transaction_id: txn.id,
-                gateway: 'razorpay'
-            });
+            await triggerDeveloperWebhook(txn.project_id, 'payment.success', { ...txn, status: 'SUCCESS' });
+        }
+        else if (event === 'payment.failed') {
+            await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['FAILED', orderId]);
+            await triggerDeveloperWebhook(txn.project_id, 'payment.failed', { ...txn, status: 'FAILED' });
+        }
+        else if (event === 'refund.processed') {
+            await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['REFUNDED', orderId]);
+            await triggerDeveloperWebhook(txn.project_id, 'payment.refunded', { ...txn, status: 'REFUNDED' });
         }
 
         res.json({ status: 'ok' });
@@ -688,17 +692,15 @@ app.get('/verify/cashfree', async (req, res) => {
         const order = response.data;
         if (order.order_status === 'PAID') {
             await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['SUCCESS', order_id]);
-
-            // Trigger Developer Webhook
-            await triggerDeveloperWebhook(txn.project_id, 'payment.success', {
-                user_id: txn.app_user_id,
-                transaction_id: txn.id,
-                amount: txn.amount,
-                gateway: 'cashfree'
-            });
-
+            await triggerDeveloperWebhook(txn.project_id, 'payment.success', { ...txn, status: 'SUCCESS' });
             res.redirect(`sugunabase://payment/success?id=${order_id}`);
+        } else if (order.order_status === 'ACTIVE') {
+            await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', ['PENDING', order_id]);
+            res.redirect(`sugunabase://payment/cancel`);
         } else {
+            const finalStatus = order.order_status === 'CANCELLED' ? 'CANCELLED' : 'FAILED';
+            await pool.query('UPDATE transactions SET status = $1 WHERE order_id = $2', [finalStatus, order_id]);
+            await triggerDeveloperWebhook(txn.project_id, `payment.${finalStatus.toLowerCase()}`, { ...txn, status: finalStatus });
             res.redirect(`sugunabase://payment/cancel`);
         }
     } catch (e) {
