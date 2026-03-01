@@ -106,16 +106,34 @@ app.get('/products', async (req, res) => {
 app.get('/products/active', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
+        const { gateway = '', startDate, endDate } = req.query;
 
-        // Return summary of products ordered by frequency - this is "Auto-Discovery"
-        const result = await pool.query(`
+        let query = `
             SELECT item_type as product_id, gateway, COUNT(*) as total_sales, SUM(amount) as total_revenue, MAX(created_at) as last_sold
             FROM transactions 
             WHERE project_id = $1 AND status = 'SUCCESS'
-            GROUP BY item_type, gateway
-            ORDER BY total_sales DESC
-        `, [projectId]);
+        `;
+        let params = [projectId];
+        let paramIndex = 2;
 
+        if (gateway) {
+            query += ` AND gateway = $${paramIndex++}`;
+            params.push(gateway);
+        }
+
+        if (startDate) {
+            query += ` AND created_at >= $${paramIndex++}`;
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            query += ` AND created_at <= $${paramIndex++}`;
+            params.push(endDate);
+        }
+
+        query += ` GROUP BY item_type, gateway ORDER BY total_sales DESC`;
+
+        const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (e) {
         res.status(500).json({ error: e.message });

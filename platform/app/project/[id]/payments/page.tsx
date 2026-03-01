@@ -118,7 +118,14 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
 
     const fetchProducts = async () => {
         try {
-            const data = await api.get(`/payments/${id}/products/active`);
+            const params = getFilterParams();
+            // Clear unnecessary params for products endpoint
+            params.delete('limit');
+            params.delete('offset');
+            params.delete('search');
+            params.delete('status');
+
+            const data = await api.get(`/payments/${id}/products/active?${params.toString()}`);
             setProducts(data || []);
         } catch (e) {
             console.error("Failed to fetch products", e);
@@ -126,11 +133,10 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
     };
 
     useEffect(() => {
-        if (id) {
-            fetchConfigs();
-            if (activeTab === 'products') fetchProducts();
+        if (id && activeTab === 'products') {
+            fetchProducts();
         }
-    }, [id, activeTab]);
+    }, [id, activeTab, gatewayFilter, datePreset, customRange]);
 
     useEffect(() => {
         if (id && activeTab === 'transactions') {
@@ -426,18 +432,80 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
 
             {activeTab === 'products' && (
                 <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">Detected Products / SKUs</h3>
-                            <p className="text-xs text-gray-500">Automatically detected from your app's transaction history.</p>
+                    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden mb-4">
+                        <div className="p-4 border-b border-gray-100 bg-gray-50/50 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <h3 className="text-sm font-bold text-gray-600 uppercase tracking-widest">Detected Products / SKUs</h3>
+                                    <button
+                                        onClick={() => fetchProducts()}
+                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="Refresh List"
+                                    >
+                                        <RefreshCw className="h-4 w-4" />
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={() => setShowProductModal(true)}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm"
+                                >
+                                    <Zap className="h-3.5 w-3.5" />
+                                    Add SKU Manually
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <select
+                                    className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
+                                    value={datePreset}
+                                    onChange={(e) => { setDatePreset(e.target.value); }}
+                                >
+                                    <option value="all">All Time</option>
+                                    <option value="today">Today</option>
+                                    <option value="yesterday">Yesterday</option>
+                                    <option value="7days">Last 7 Days</option>
+                                    <option value="30days">Last 30 Days</option>
+                                    <option value="90days">Last 90 Days</option>
+                                    <option value="this_month">This Month</option>
+                                    <option value="last_month">Last Month</option>
+                                    <option value="custom">Custom Range</option>
+                                </select>
+
+                                <select
+                                    className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
+                                    value={gatewayFilter}
+                                    onChange={(e) => { setGatewayFilter(e.target.value); }}
+                                >
+                                    <option value="">All Gateways</option>
+                                    <option value="razorpay">Razorpay</option>
+                                    <option value="cashfree">Cashfree</option>
+                                    <option value="google_play">Google In-App</option>
+                                </select>
+                            </div>
+
+                            {datePreset === 'custom' && (
+                                <div className="flex items-center gap-4 p-3 bg-blue-50 border border-blue-100 rounded-xl animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs font-bold text-blue-800">Start:</label>
+                                        <input
+                                            type="date"
+                                            className="bg-white border border-blue-200 rounded-lg px-2 py-1 text-xs outline-none"
+                                            value={customRange.start}
+                                            onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs font-bold text-blue-800">End:</label>
+                                        <input
+                                            type="date"
+                                            className="bg-white border border-blue-200 rounded-lg px-2 py-1 text-xs outline-none"
+                                            value={customRange.end}
+                                            onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        <button
-                            onClick={() => fetchProducts()}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Refresh List"
-                        >
-                            <RefreshCw className="h-5 w-5" />
-                        </button>
                     </div>
 
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
