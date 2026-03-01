@@ -16,6 +16,10 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
     // Filtering & Pagination
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [gatewayFilter, setGatewayFilter] = useState('');
+    const [datePreset, setDatePreset] = useState('all');
+    const [customRange, setCustomRange] = useState({ start: '', end: '' });
+    const [stats, setStats] = useState<{ total_revenue: number; count: number }>({ total_revenue: 0, count: 0 });
     const [page, setPage] = useState(0);
     const transactionsPerPage = 50;
 
@@ -50,16 +54,63 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
         }
     };
 
+    const getFilterParams = () => {
+        const params = new URLSearchParams({
+            limit: transactionsPerPage.toString(),
+            offset: (page * transactionsPerPage).toString(),
+            search,
+            status: statusFilter,
+            gateway: gatewayFilter
+        });
+
+        let startDate = '';
+        let endDate = '';
+        const now = new Date();
+
+        if (datePreset === 'today') {
+            startDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+        } else if (datePreset === 'yesterday') {
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            startDate = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
+            endDate = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
+        } else if (datePreset === '7days') {
+            const d = new Date(now);
+            d.setDate(now.getDate() - 7);
+            startDate = d.toISOString();
+        } else if (datePreset === '30days') {
+            const d = new Date(now);
+            d.setDate(now.getDate() - 30);
+            startDate = d.toISOString();
+        } else if (datePreset === '90days') {
+            const d = new Date(now);
+            d.setDate(now.getDate() - 90);
+            startDate = d.toISOString();
+        } else if (datePreset === 'this_month') {
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        } else if (datePreset === 'last_month') {
+            startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+            endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+        } else if (datePreset === 'custom' && customRange.start && customRange.end) {
+            startDate = new Date(customRange.start).toISOString();
+            endDate = new Date(new Date(customRange.end).setHours(23, 59, 59, 999)).toISOString();
+        }
+
+        if (startDate) params.append('startDate', startDate);
+        if (endDate) params.append('endDate', endDate);
+
+        return params;
+    };
+
     const fetchTransactions = async () => {
         try {
-            const params = new URLSearchParams({
-                limit: transactionsPerPage.toString(),
-                offset: (page * transactionsPerPage).toString(),
-                search: search,
-                status: statusFilter
-            });
+            const params = getFilterParams();
             const data = await api.get(`/payments/${id}/transactions?${params.toString()}`);
             setTransactions(data || []);
+
+            // Also fetch stats for the same filters
+            const statsData = await api.get(`/payments/${id}/transactions/stats?${params.toString()}`);
+            setStats(statsData || { total_revenue: 0, count: 0 });
         } catch (e) {
             console.error("Failed to fetch transactions", e);
         }
@@ -85,7 +136,7 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
         if (id && activeTab === 'transactions') {
             fetchTransactions();
         }
-    }, [id, activeTab, search, statusFilter, page]);
+    }, [id, activeTab, search, statusFilter, gatewayFilter, datePreset, customRange, page]);
 
     const openConfig = (gateway: string) => {
         const existing = configs.find(c => c.gateway === gateway);
@@ -212,23 +263,59 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
 
             {activeTab === 'transactions' && (
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center bg-gray-50/50 gap-4">
-                        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-                            <h3 className="text-sm font-bold text-gray-600 uppercase tracking-widest mr-4">Activity</h3>
+                    <div className="p-4 border-b border-gray-100 bg-gray-50/50 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <h3 className="text-sm font-bold text-gray-600 uppercase tracking-widest">Activity</h3>
+                                <div className="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm">
+                                    <DollarSign className="w-3.5 h-3.5" />
+                                    Total: ₹ {Number(stats.total_revenue || 0).toLocaleString()} ({stats.count} Txns)
+                                </div>
+                            </div>
+                            <button className="text-xs text-blue-600 font-bold hover:underline whitespace-nowrap">Download Report</button>
+                        </div>
 
-                            <div className="relative flex-1 md:w-64">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                 <input
                                     type="text"
                                     placeholder="Search UID / Txn ID"
-                                    className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm w-full outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm w-full outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
                                     value={search}
                                     onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                                 />
                             </div>
 
                             <select
-                                className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
+                                value={datePreset}
+                                onChange={(e) => { setDatePreset(e.target.value); setPage(0); }}
+                            >
+                                <option value="all">All Time</option>
+                                <option value="today">Today</option>
+                                <option value="yesterday">Yesterday</option>
+                                <option value="7days">Last 7 Days</option>
+                                <option value="30days">Last 30 Days</option>
+                                <option value="90days">Last 90 Days</option>
+                                <option value="this_month">This Month</option>
+                                <option value="last_month">Last Month</option>
+                                <option value="custom">Custom Range</option>
+                            </select>
+
+                            <select
+                                className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
+                                value={gatewayFilter}
+                                onChange={(e) => { setGatewayFilter(e.target.value); setPage(0); }}
+                            >
+                                <option value="">All Gateways</option>
+                                <option value="razorpay">Razorpay</option>
+                                <option value="cashfree">Cashfree</option>
+                                <option value="google_play">Google In-App</option>
+                            </select>
+
+                            <select
+                                className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
                                 value={statusFilter}
                                 onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
                             >
@@ -241,7 +328,29 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                 <option value="CANCELLED">Cancelled</option>
                             </select>
                         </div>
-                        <button className="text-xs text-blue-600 font-bold hover:underline whitespace-nowrap">Download Report</button>
+
+                        {datePreset === 'custom' && (
+                            <div className="flex items-center gap-4 p-3 bg-blue-50 border border-blue-100 rounded-xl animate-in fade-in slide-in-from-top-2">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-bold text-blue-800">Start:</label>
+                                    <input
+                                        type="date"
+                                        className="bg-white border border-blue-200 rounded-lg px-2 py-1 text-xs outline-none"
+                                        value={customRange.start}
+                                        onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-bold text-blue-800">End:</label>
+                                    <input
+                                        type="date"
+                                        className="bg-white border border-blue-200 rounded-lg px-2 py-1 text-xs outline-none"
+                                        value={customRange.end}
+                                        onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="min-h-[400px]">
                         {transactions.length === 0 ? (
@@ -278,11 +387,11 @@ export default function PaymentsPage({ params }: { params: Promise<{ id: string 
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${txn.status === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                        txn.status === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                            txn.status === 'REFUNDED' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                                                                txn.status === 'CANCELLED' ? 'bg-gray-50 text-gray-600 border-gray-100' :
-                                                                    txn.status === 'CREATED' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                                                        'bg-orange-50 text-orange-600 border-orange-100'
+                                                    txn.status === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                        txn.status === 'REFUNDED' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                                            txn.status === 'CANCELLED' ? 'bg-gray-50 text-gray-600 border-gray-100' :
+                                                                txn.status === 'CREATED' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                                    'bg-orange-50 text-orange-600 border-orange-100'
                                                     }`}>
                                                     {txn.status}
                                                 </span>

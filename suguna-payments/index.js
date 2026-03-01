@@ -157,13 +157,13 @@ app.post('/verify/google-play', async (req, res) => {
     }
 });
 
-// Fetch transactions for a project with pagination and filtering
+// Fetch transactions for a project with advanced filters and pagination
 app.get('/transactions', async (req, res) => {
     try {
         const projectId = req.headers['x-project-id'];
         if (!projectId) return res.status(400).json({ error: "Missing x-project-id header" });
 
-        const { limit = 50, offset = 0, search = '', status = '' } = req.query;
+        const { limit = 50, offset = 0, search = '', status = '', gateway = '', startDate, endDate } = req.query;
 
         let query = 'SELECT * FROM transactions WHERE project_id = $1';
         let params = [projectId];
@@ -172,6 +172,21 @@ app.get('/transactions', async (req, res) => {
         if (status) {
             query += ` AND status = $${paramIndex++}`;
             params.push(status);
+        }
+
+        if (gateway) {
+            query += ` AND gateway = $${paramIndex++}`;
+            params.push(gateway);
+        }
+
+        if (startDate) {
+            query += ` AND created_at >= $${paramIndex++}`;
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            query += ` AND created_at <= $${paramIndex++}`;
+            params.push(endDate);
         }
 
         if (search) {
@@ -188,6 +203,40 @@ app.get('/transactions', async (req, res) => {
         res.json(result.rows);
     } catch (e) {
         console.error('[PAYMENTS] GET Transactions Error:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// GET STATS (Total Revenue)
+app.get('/transactions/stats', async (req, res) => {
+    try {
+        const projectId = req.headers['x-project-id'];
+        const { status = 'SUCCESS', gateway = '', startDate, endDate } = req.query;
+
+        let query = 'SELECT SUM(amount) as total_revenue, COUNT(*) as count FROM transactions WHERE project_id = $1';
+        let params = [projectId];
+        let paramIndex = 2;
+
+        if (status) {
+            query += ` AND status = $${paramIndex++}`;
+            params.push(status);
+        }
+        if (gateway) {
+            query += ` AND gateway = $${paramIndex++}`;
+            params.push(gateway);
+        }
+        if (startDate) {
+            query += ` AND created_at >= $${paramIndex++}`;
+            params.push(startDate);
+        }
+        if (endDate) {
+            query += ` AND created_at <= $${paramIndex++}`;
+            params.push(endDate);
+        }
+
+        const result = await pool.query(query, params);
+        res.json(result.rows[0]);
+    } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
